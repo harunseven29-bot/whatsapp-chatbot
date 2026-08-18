@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Bağlantısı | Gemini AI Asistan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0c111d;
+      --card-bg: #161e2e;
+      --card-border: #232f48;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-subtle: #64748b;
+      --wa-green: #25d366;
+      --wa-green-hover: #20bd5a;
+      --wa-dark: #128c7e;
+      --accent-blue: #3b82f6;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --radius-lg: 20px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-color);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(37, 211, 102, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.08) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-lg);
+      padding: 36px 32px;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--wa-green), var(--accent-blue));
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(37, 211, 102, 0.1);
+      border: 1px solid rgba(37, 211, 102, 0.25);
+      color: var(--wa-green);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 16px;
+    }
+
+    .brand-badge svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* QR Code Container */
+    .qr-wrapper {
+      background: #ffffff;
+      border-radius: var(--radius-md);
+      padding: 16px;
+      width: 280px;
+      height: 280px;
+      margin: 0 auto 24px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease;
+    }
+
+    .qr-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      border-radius: 4px;
+    }
+
+    .qr-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: #475569;
+      text-align: center;
+    }
+
+    .spinner {
+      width: 38px;
+      height: 38px;
+      border: 3px solid rgba(37, 211, 102, 0.2);
+      border-top-color: var(--wa-green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Status Pill */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      margin-bottom: 28px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent-amber);
+      position: relative;
+    }
+
+    .status-dot.pulse::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      left: -3px;
+      right: -3px;
+      bottom: -3px;
+      border-radius: 50%;
+      border: 2px solid inherit;
+      animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% { transform: scale(0.8); opacity: 0.8; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+
+    .status-dot.connected {
+      background: var(--wa-green);
+    }
+    .status-dot.waiting_qr {
+      background: var(--accent-amber);
+    }
+    .status-dot.connecting {
+      background: var(--accent-blue);
+    }
+    .status-dot.disconnected {
+      background: var(--accent-red);
+    }
+
+    /* Connected View */
+    .connected-card {
+      display: none;
+      text-align: center;
+      padding: 12px 0;
+    }
+
+    .success-icon-wrap {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: rgba(37, 211, 102, 0.15);
+      border: 2px solid rgba(37, 211, 102, 0.4);
+      color: var(--wa-green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px auto;
+    }
+
+    .success-icon-wrap svg {
+      width: 36px;
+      height: 36px;
+      stroke-width: 2.5;
+    }
+
+    .account-info {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin: 18px 0 24px 0;
+      text-align: left;
+    }
+
+    .account-info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    .account-info-row:last-child {
+      margin-bottom: 0;
+    }
+    .account-label {
+      color: var(--text-muted);
+    }
+    .account-val {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* Instructions */
+    .instructions {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 24px;
+    }
+
+    .instructions-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-subtle);
+      margin-bottom: 14px;
+    }
+
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .step-item strong {
+      color: var(--text-main);
+    }
+
+    /* Actions */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px 20px;
+      border-radius: var(--radius-md);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+      text-decoration: none;
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.25);
+      color: #fca5a5;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      margin-top: 12px;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 12px;
+      color: var(--text-subtle);
+    }
+
+    .live-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--wa-green);
+      margin-right: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" id="main-card">
+      <!-- Header -->
+      <div class="header">
+        <div class="brand-badge">
+          <svg viewBox="0 0 24 24">
+            <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-5.46-4.45-9.92-9.91-9.92zM12.04 20.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31c-.82-1.31-1.26-2.83-1.26-4.38 0-4.54 3.7-8.24 8.25-8.24 4.54 0 8.24 3.7 8.24 8.24 0 4.54-3.7 8.24-8.24 8.24zm4.52-6.17c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.07-.25-.12-1.05-.39-2-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43s-.56-1.34-.76-1.84c-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.73 2.65 4.2 3.71.59.25 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.15-1.18-.07-.12-.22-.19-.47-.31z"/>
+          </svg>
+          WhatsApp Bağlantısı
+        </div>
+        <h1 class="title" id="view-title">WhatsApp Hesabınızı Bağlayın</h1>
+        <p class="subtitle" id="view-subtitle">Telefonunuzdaki WhatsApp uygulaması ile aşağıdaki QR kodunu tarayarak yapay zeka asistanını aktif edin.</p>
+      </div>
+
+      <!-- QR View -->
+      <div id="qr-section">
+        <div class="qr-wrapper">
+          <div class="qr-loading" id="qr-placeholder">
+            <div class="spinner"></div>
+            <span style="font-size: 13px; font-weight: 500;">QR Kod Hazırlanıyor...</span>
+          </div>
+          <img id="qr-img" class="qr-image" src="" alt="WhatsApp QR Kodu" style="display: none;" />
+        </div>
+      </div>
+
+      <!-- Connected View -->
+      <div class="connected-card" id="connected-section">
+        <div class="success-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 6px; color: var(--text-main);">Bağlantı Başarılı!</h2>
+        <p style="font-size: 14px; color: var(--text-muted);">Yapay zeka asistanı gelen mesajları 7/24 otomatik olarak yanıtlıyor.</p>
+
+        <div class="account-info">
+          <div class="account-info-row">
+            <span class="account-label">Bağlı Hesap:</span>
+            <span class="account-val" id="acc-name">-</span>
+          </div>
+          <div class="account-info-row">
+            <span class="account-label">WhatsApp JID:</span>
+            <span class="account-val" id="acc-jid" style="font-family: monospace; font-size: 12px;">-</span>
+          </div>
+          <div class="account-info-row">
+            <span class="account-label">Bağlantı Zamanı:</span>
+            <span class="account-val" id="acc-time">-</span>
+          </div>
+        </div>
+
+        <button class="btn btn-danger" id="btn-logout" onclick="handleLogout()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Oturumu Kapat & Yeniden Bağla
+        </button>
+      </div>
+
+      <!-- Status Indicator -->
+      <div class="status-bar" id="status-bar">
+        <div class="status-dot waiting_qr pulse" id="status-dot"></div>
+        <span id="status-text">Bağlantı durumu kontrol ediliyor...</span>
+      </div>
+
+      <!-- Instructions Section -->
+      <div class="instructions" id="instructions-section">
+        <div class="instructions-title">Nasıl Bağlanır?</div>
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div>Telefonunuzdan <strong>WhatsApp</strong> uygulamasını açın</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div><strong>Ayarlar</strong> &gt; <strong>Bağlı Cihazlar</strong> menüsüne girin</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div><strong>Cihaz Bağla</strong> butonuna dokunun</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div>Kamerayı bu ekrandaki <strong>QR Koda</strong> doğru tutun</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <span class="live-dot"></span> 7/24 Otomatik Eşitleme Aktif (Gemini 3.7 Flash)
+    </div>
+  </div>
+
+  <script>
+    let currentStatus = null;
+    let pollInterval = null;
+    let isActionInProgress = false;
+
+    const qrSection = document.getElementById('qr-section');
+    const connectedSection = document.getElementById('connected-section');
+    const instructionsSection = document.getElementById('instructions-section');
+    const qrPlaceholder = document.getElementById('qr-placeholder');
+    const qrImg = document.getElementById('qr-img');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const viewTitle = document.getElementById('view-title');
+    const viewSubtitle = document.getElementById('view-subtitle');
+
+    const accName = document.getElementById('acc-name');
+    const accJid = document.getElementById('acc-jid');
+    const accTime = document.getElementById('acc-time');
+
+    async function fetchStatus() {
+      if (isActionInProgress) return;
+
+      try {
+        const response = await fetch('/api/whatsapp/status', {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+
+        if (!response.ok) throw new Error('Sunucu yanıt vermedi');
+
+        const data = await response.json();
+        updateUI(data);
+      } catch (err) {
+        statusDot.className = 'status-dot disconnected';
+        statusText.textContent = 'Sunucuya ulaşılamıyor...';
+      }
+    }
+
+    function updateUI(data) {
+      const status = data.status || 'disconnected';
+
+      const qrVal = data.qrRaw || data.qr;
+      console.log("[DEBUG] FRONTEND_QR_RECEIVED", {
+        length: qrVal?.length,
+        prefix: qrVal?.slice(0, 12),
+        updatedAt: data.updatedAt
+      });
+
+      if (status === 'connected') {
+        // Connected State
+        qrSection.style.display = 'none';
+        instructionsSection.style.display = 'none';
+        connectedSection.style.display = 'block';
+
+        viewTitle.textContent = 'WhatsApp Asistanı Aktif';
+        viewSubtitle.textContent = 'Bot başarıyla bağlandı ve gelen müşteri taleplerini yanıtlıyor.';
+
+        statusDot.className = 'status-dot connected';
+        statusText.textContent = 'WhatsApp başarıyla bağlandı';
+
+        accName.textContent = data.userName || 'WhatsApp Hesabı';
+        accJid.textContent = data.userJid || 'Bağlı';
+        accTime.textContent = data.connectedAt 
+          ? new Date(data.connectedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          : 'Aktif';
+
+      } else if (status === 'waiting_qr') {
+        // Waiting QR Scan State
+        qrSection.style.display = 'block';
+        instructionsSection.style.display = 'block';
+        connectedSection.style.display = 'none';
+
+        viewTitle.textContent = 'WhatsApp Hesabınızı Bağlayın';
+        viewSubtitle.textContent = 'Telefonunuzdaki WhatsApp uygulaması ile QR kodunu taratarak yapay zeka asistanını aktif edin.';
+
+        statusDot.className = 'status-dot waiting_qr pulse';
+        statusText.textContent = 'QR kodunu telefonunuzla tarayın';
+
+        if (data.qr) {
+          qrImg.src = data.qr;
+          qrImg.style.display = 'block';
+          qrPlaceholder.style.display = 'none';
+        } else {
+          qrImg.style.display = 'none';
+          qrPlaceholder.style.display = 'flex';
+        }
+
+      } else if (status === 'connecting') {
+        // Connecting State
+        qrSection.style.display = 'block';
+        instructionsSection.style.display = 'block';
+        connectedSection.style.display = 'none';
+
+        statusDot.className = 'status-dot connecting pulse';
+        statusText.textContent = 'WhatsApp\'a bağlanılıyor...';
+
+        qrImg.style.display = 'none';
+        qrPlaceholder.style.display = 'flex';
+        qrPlaceholder.querySelector('span').textContent = 'Oturum doğrulanıyor...';
+
+      } else {
+        // Disconnected State
+        qrSection.style.display = 'block';
+        instructionsSection.style.display = 'block';
+        connectedSection.style.display = 'none';
+
+        statusDot.className = 'status-dot disconnected';
+        statusText.textContent = 'Bağlantı kesildi. Yeniden başlatılıyor...';
+
+        qrImg.style.display = 'none';
+        qrPlaceholder.style.display = 'flex';
+        qrPlaceholder.querySelector('span').textContent = 'Yeni QR bekleniyor...';
+      }
+
+      currentStatus = status;
+    }
+
+    async function handleLogout() {
+      if (!confirm('WhatsApp oturumunu kapatıp yeni QR kodu üretmek istiyor musunuz?')) {
+        return;
+      }
+
+      const btn = document.getElementById('btn-logout');
+      btn.disabled = true;
+      btn.textContent = 'Oturum Kapatılıyor...';
+      isActionInProgress = true;
+
+      try {
+        const res = await fetch('/api/whatsapp/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        await res.json();
+      } catch (err) {
+        console.error('Logout error:', err);
+      } finally {
+        isActionInProgress = false;
+        btn.disabled = false;
+        setTimeout(fetchStatus, 1000);
+      }
+    }
+
+    // Start polling every 2 seconds
+    fetchStatus();
+    pollInterval = setInterval(fetchStatus, 2000);
+  </script>
+</body>
+</html>
