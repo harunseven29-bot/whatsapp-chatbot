@@ -14,7 +14,6 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcodeTerminal = require('qrcode-terminal');
-const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
 const { generateReply } = require('./assistant');
@@ -23,6 +22,18 @@ const { generateReply } = require('./assistant');
 const BASE_AUTH_DIR = process.env.AUTH_DIR
   ? path.resolve(process.env.AUTH_DIR)
   : path.resolve(__dirname, 'auth');
+
+/**
+ * Authoritative in-memory state returned instantly by /api/whatsapp/status
+ */
+const whatsappState = {
+  status: "starting", // "starting" | "connecting" | "waiting_qr" | "connected" | "disconnected"
+  qr: null,
+  jid: null,
+  userName: null,
+  connectedAt: null,
+  updatedAt: Date.now()
+};
 
 /**
  * Session storage map (Designed for single & multi-session support)
@@ -42,14 +53,8 @@ function getOrCreateSession(sessionId = 'default') {
       id: sessionId,
       authDir: sessionAuthDir,
       socket: null,
-      status: 'disconnected', // 'disconnected' | 'connecting' | 'waiting_qr' | 'connected'
-      qrString: null,
-      qrDataUrl: null,
-      qrUpdatedAt: null,
+      status: 'starting',
       pairingCode: null,
-      userJid: null,
-      userName: null,
-      connectedAt: null,
       reconnectAttempts: 0,
       isReconnecting: false,
       isInitializing: false,
@@ -108,7 +113,7 @@ function cleanupSocket(session) {
 }
 
 /**
- * Starts WhatsApp socket connection for given session with auto-healing
+ * Starts WhatsApp socket connection with auto-healing
  */
 async function startWhatsApp(sessionId = 'default', isReconnect = false) {
   const session = getOrCreateSession(sessionId);
@@ -124,14 +129,12 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     return session.socket;
   }
 
-  if (!isReconnect && session.socket && session.status === 'connected') {
+  if (!isReconnect && session.socket && whatsappState.status === 'connected') {
     logEvent('info', 'WhatsApp zaten bağlı ve çalışıyor.', null, sessionId);
     return session.socket;
   }
 
   session.isInitializing = true;
-
-  // Clean up existing socket before opening a fresh one
   cleanupSocket(session);
 
   try {
@@ -141,6 +144,8 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
       logEvent('info', `Kalıcı auth klasörü oluşturuldu: ${session.authDir}`, null, sessionId);
     }
 
+    whatsappState.status = 'connecting';
+    whatsappState.updatedAt = Date.now();
     session.status = 'connecting';
 
     // 2. Load multi-file auth state
@@ -157,7 +162,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     // 3. Create WhatsApp Socket
     const sock = makeWASocket({
       version,
-      logger: pino({ level: 'silent' }), // Suppress internal noisy logs
+      logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
       auth: {
         creds: state.creds,
@@ -185,7 +190,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     if (pairingNumber && !isRegistered && sessionId === 'default') {
       setTimeout(async () => {
         try {
-          if (session.socket && session.status !== 'connected') {
+          if (session.socket && whatsappState.status !== 'connected') {
             const code = await sock.requestPairingCode(pairingNumber);
             session.pairingCode = code;
             console.log(`\n========================================`);
@@ -220,59 +225,56 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           updatedAt: Date.now()
         });
 
+        // Update Authoritative State
+        whatsappState.status = 'waiting_qr';
+        whatsappState.qr = qr;
+        whatsappState.updatedAt = Date.now();
         session.status = 'waiting_qr';
-        session.qrString = qr;
-        session.qrUpdatedAt = new Date().toISOString();
-
-        try {
-          session.qrDataUrl = await QRCode.toDataURL(qr, {
-            margin: 1,
-            width: 340,
-            color: {
-              dark: '#111827',
-              light: '#ffffff'
-            }
-          });
-        } catch (qrGenErr) {
-          // non-fatal
-        }
 
         // Print clean QR to terminal
         console.log('\n======================================================');
         console.log(`📱 WhatsApp QR Kodu Hazır (${sessionId})! Web: /connect`);
         console.log('======================================================\n');
         qrcodeTerminal.generate(qr, { small: true });
-        logEvent('auth', 'Yeni WhatsApp QR kodu oluşturuldu ve web arayüzüne iletildi.', null, sessionId);
+        logEvent('auth', 'Yeni WhatsApp QR kodu oluşturuldu.', null, sessionId);
       }
 
       // Connection open
       if (connection === 'open') {
+        const user = sock.user;
+
+        // Update Authoritative State
+        whatsappState.status = 'connected';
+        whatsappState.qr = null;
+        whatsappState.jid = user?.id || null;
+        whatsappState.userName = user?.name || 'WhatsApp Hesabı';
+        whatsappState.connectedAt = Date.now();
+        whatsappState.updatedAt = Date.now();
+
         session.status = 'connected';
-        session.qrString = null;
-        session.qrDataUrl = null;
-        session.qrUpdatedAt = null;
-        session.pairingCode = null;
-        session.connectedAt = new Date().toISOString();
         session.reconnectAttempts = 0;
         session.isReconnecting = false;
-
-        const user = sock.user;
-        session.userJid = user?.id || null;
-        session.userName = user?.name || 'WhatsApp Hesabı';
 
         logEvent('baglanti', '✅ WhatsApp başarıyla bağlandı! Bot aktif ve mesajları dinliyor.', null, sessionId);
         console.log(`[WhatsApp] Bağlanan Hesap: ${user?.name || ''} (${user?.id || ''})`);
       } else if (connection === 'close') {
-        session.status = 'disconnected';
-        session.connectedAt = null;
-
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const reason = lastDisconnect?.error?.message || 'Bağlantı kapandı';
         const isLoggedOut = statusCode === DisconnectReason.loggedOut;
         const isRestartRequired = statusCode === DisconnectReason.restartRequired || statusCode === 515;
 
+        // Update Authoritative State
+        whatsappState.status = 'disconnected';
+        whatsappState.connectedAt = null;
+        whatsappState.updatedAt = Date.now();
+        session.status = 'disconnected';
+
         if (isLoggedOut) {
           logEvent('info', 'Oturum kapatıldı (Logged out). Auth klasörü yenileniyor.', null, sessionId);
+          whatsappState.jid = null;
+          whatsappState.userName = null;
+          whatsappState.qr = null;
+
           try {
             if (fs.existsSync(session.authDir)) {
               fs.rmSync(session.authDir, { recursive: true, force: true });
@@ -284,7 +286,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           }, 1500);
 
         } else if (isRestartRequired) {
-          // Baileys standard 515 handshake restart - immediate fast reconnect
+          // Baileys 515 handshake restart - fast reconnect
           logEvent('info', 'WhatsApp akış anahtarları güncellendi (515 Restart Required), anında devam ediliyor...', null, sessionId);
           session.isReconnecting = false;
           session.reconnectTimer = setTimeout(() => {
@@ -292,7 +294,6 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           }, 250);
 
         } else {
-          // Standard auto-reconnection for network blips (503, 408, etc.)
           logEvent('info', `Bağlantı tazeleniyor (Sebep: ${reason}, Kod: ${statusCode || 'Stream'})...`, null, sessionId);
 
           if (!session.isReconnecting) {
@@ -307,6 +308,8 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           }
         }
       } else if (connection === 'connecting') {
+        whatsappState.status = 'connecting';
+        whatsappState.updatedAt = Date.now();
         session.status = 'connecting';
         if (session.reconnectAttempts <= 1) {
           logEvent('info', 'WhatsApp sunucularına bağlanılıyor...', null, sessionId);
@@ -320,23 +323,13 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
 
       for (const msg of messages) {
         try {
-          // Rule 1: Do not reply to own messages
           if (msg.key.fromMe) continue;
 
           const remoteJid = msg.key.remoteJid;
-          if (!remoteJid) continue;
-
-          // Rule 2: Ignore group messages (@g.us)
-          if (remoteJid.endsWith('@g.us')) {
+          if (!remoteJid || remoteJid.endsWith('@g.us') || remoteJid.includes('@broadcast')) {
             continue;
           }
 
-          // Rule 3: Ignore broadcast / status updates
-          if (remoteJid === 'status@broadcast' || remoteJid.includes('@broadcast')) {
-            continue;
-          }
-
-          // Rule 4: Process only text messages
           const userText = extractTextMessage(msg);
           if (!userText || typeof userText !== 'string' || userText.trim().length === 0) {
             continue;
@@ -348,23 +341,17 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           const senderName = msg.pushName || remoteJid.split('@')[0];
           logEvent('mesaj', `📩 [${senderName} (${remoteJid})]: "${userText}"`, null, sessionId);
 
-          // Send "typing..." presence
           try {
             await sock.sendPresenceUpdate('composing', remoteJid);
           } catch (presenceErr) {}
 
-          // Generate response with Gemini AI
           const aiResponse = await generateReply(remoteJid, userText);
 
-          // Stop "typing..." presence
           try {
             await sock.sendPresenceUpdate('paused', remoteJid);
           } catch (e) {}
 
-          // Send Gemini AI response back
-          await sock.sendMessage(remoteJid, {
-            text: aiResponse
-          });
+          await sock.sendMessage(remoteJid, { text: aiResponse });
 
           session.stats.messagesSent += 1;
           logEvent('cevap', `🤖 [Yanıt -> ${senderName}]: "${aiResponse.substring(0, 80)}..."`, null, sessionId);
@@ -378,6 +365,8 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     return sock;
   } catch (initErr) {
     session.isInitializing = false;
+    whatsappState.status = 'disconnected';
+    whatsappState.updatedAt = Date.now();
     session.status = 'disconnected';
     session.stats.errors += 1;
     logEvent('info', `WhatsApp başlatma tazeleniyor: ${initErr.message}`, null, sessionId);
@@ -389,31 +378,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
 }
 
 /**
- * Get current WhatsApp status & metadata for session
- */
-function getWhatsAppStatus(sessionId = 'default') {
-  const session = getOrCreateSession(sessionId);
-
-  return {
-    sessionId: session.id,
-    status: session.status,
-    qr: session.status === 'waiting_qr' ? session.qrDataUrl : null,
-    qrRaw: session.status === 'waiting_qr' ? session.qrString : null,
-    qrUpdatedAt: session.qrUpdatedAt,
-    pairingCode: session.pairingCode,
-    userJid: session.userJid,
-    userName: session.userName,
-    connectedAt: session.connectedAt,
-    reconnectAttempts: session.reconnectAttempts,
-    stats: session.stats,
-    authDir: session.authDir,
-    authDirExists: fs.existsSync(session.authDir),
-    isConfigured: !!process.env.GEMINI_API_KEY
-  };
-}
-
-/**
- * Logout / Disconnect session and optionally clear session credentials
+ * Logout & reset
  */
 async function logoutWhatsApp(sessionId = 'default') {
   const session = getOrCreateSession(sessionId);
@@ -431,12 +396,14 @@ async function logoutWhatsApp(sessionId = 'default') {
     cleanupSocket(session);
   }
 
+  whatsappState.status = 'disconnected';
+  whatsappState.qr = null;
+  whatsappState.jid = null;
+  whatsappState.userName = null;
+  whatsappState.connectedAt = null;
+  whatsappState.updatedAt = Date.now();
+
   session.status = 'disconnected';
-  session.userJid = null;
-  session.userName = null;
-  session.connectedAt = null;
-  session.qrString = null;
-  session.qrDataUrl = null;
   session.isInitializing = false;
   session.isReconnecting = false;
 
@@ -449,7 +416,6 @@ async function logoutWhatsApp(sessionId = 'default') {
     console.error('[Auth] Temizleme hatası:', err.message);
   }
 
-  // Trigger fresh startup to generate a new QR code immediately
   session.reconnectTimer = setTimeout(() => {
     startWhatsApp(sessionId, true);
   }, 1000);
@@ -458,7 +424,7 @@ async function logoutWhatsApp(sessionId = 'default') {
 }
 
 /**
- * Disconnect socket gracefully on server shutdown
+ * Disconnect socket gracefully
  */
 async function disconnectWhatsApp(sessionId = 'default') {
   const session = getOrCreateSession(sessionId);
@@ -467,14 +433,16 @@ async function disconnectWhatsApp(sessionId = 'default') {
     session.reconnectTimer = null;
   }
   cleanupSocket(session);
+  whatsappState.status = 'disconnected';
+  whatsappState.updatedAt = Date.now();
   session.status = 'disconnected';
   logEvent('info', 'WhatsApp soketi güvenli kapatıldı.', null, sessionId);
 }
 
 module.exports = {
   startWhatsApp,
-  getWhatsAppStatus,
   logoutWhatsApp,
   disconnectWhatsApp,
+  whatsappState,
   AUTH_DIR: BASE_AUTH_DIR
 };
