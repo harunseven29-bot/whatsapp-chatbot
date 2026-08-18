@@ -1,0 +1,6 @@
+{
+  "name": "WhatsApp AI Chatbot Backend",
+  "description": "Production-ready WhatsApp AI Chatbot backend using Baileys and Google Gemini API with conversational memory and dynamic business context.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
