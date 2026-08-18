@@ -3,12 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WhatsApp Bağlantısı | Gemini AI Asistan</title>
+  <title>WhatsApp Bağlantısı (Pairing Code) | Gemini AI Asistan</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- Lightweight Client-side QR Code Generator -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-color: #0c111d;
@@ -115,74 +113,53 @@
       line-height: 1.5;
     }
 
-    /* QR Code Container */
-    .qr-wrapper {
-      background: #ffffff;
+    /* Pairing Code Box */
+    .pairing-box {
+      background: rgba(15, 23, 42, 0.9);
+      border: 2px solid rgba(37, 211, 102, 0.3);
       border-radius: var(--radius-md);
-      padding: 16px;
-      width: 270px;
-      height: 270px;
-      margin: 0 auto 12px auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      position: relative;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-      transition: all 0.3s ease;
-    }
-
-    .qr-canvas {
-      width: 100% !important;
-      height: 100% !important;
-      display: block;
-      border-radius: 4px;
-    }
-
-    .qr-image {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-      border-radius: 4px;
-    }
-
-    .qr-loading {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      color: #475569;
+      padding: 24px 16px;
       text-align: center;
+      margin: 20px 0;
+      position: relative;
+    }
+
+    .pairing-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .pairing-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      color: #38bdf8;
+      text-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+    }
+
+    .pairing-phone {
+      font-size: 13px;
+      color: var(--text-subtle);
+      margin-top: 8px;
     }
 
     .spinner {
-      width: 38px;
-      height: 38px;
+      width: 32px;
+      height: 32px;
       border: 3px solid rgba(37, 211, 102, 0.2);
       border-top-color: var(--wa-green);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
+      margin: 8px auto;
     }
 
     @keyframes spin {
       to { transform: rotate(360deg); }
-    }
-
-    /* QR ID Badge under QR Code */
-    .qr-id-badge {
-      display: block;
-      text-align: center;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px;
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.1);
-      border: 1px solid rgba(56, 189, 248, 0.25);
-      border-radius: 6px;
-      padding: 6px 12px;
-      max-width: 270px;
-      margin: 0 auto 20px auto;
-      letter-spacing: 0.05em;
     }
 
     /* Status Pill */
@@ -226,7 +203,7 @@
     }
 
     .status-dot.connected { background: var(--wa-green); }
-    .status-dot.waiting_qr { background: var(--accent-amber); }
+    .status-dot.waiting_pairing_code { background: var(--accent-amber); }
     .status-dot.connecting { background: var(--accent-blue); }
     .status-dot.disconnected { background: var(--accent-red); }
 
@@ -359,53 +336,6 @@
       color: #fca5a5;
     }
 
-    /* Debug Information Box */
-    .debug-box {
-      margin-top: 18px;
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px dashed rgba(148, 163, 184, 0.25);
-      border-radius: var(--radius-md);
-      padding: 12px 14px;
-      font-size: 12px;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    .debug-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 4px;
-    }
-    .debug-row:last-child {
-      margin-bottom: 0;
-    }
-
-    .debug-label {
-      color: var(--text-subtle);
-      font-weight: 500;
-    }
-
-    .debug-value {
-      font-family: monospace;
-      font-size: 11.5px;
-      color: #38bdf8;
-      word-break: break-all;
-    }
-
-    .debug-status-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-weight: 600;
-      text-transform: uppercase;
-      font-size: 10.5px;
-    }
-    .debug-status-badge.waiting_qr { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-    .debug-status-badge.connecting { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
-    .debug-status-badge.connected { background: rgba(37, 211, 102, 0.2); color: #4ade80; }
-    .debug-status-badge.disconnected { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-
     /* Footer */
     .footer {
       text-align: center;
@@ -424,24 +354,21 @@
           <svg viewBox="0 0 24 24">
             <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-5.46-4.45-9.92-9.91-9.92zM12.04 20.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31c-.82-1.31-1.26-2.83-1.26-4.38 0-4.54 3.7-8.24 8.25-8.24 4.54 0 8.24 3.7 8.24 8.24 0 4.54-3.7 8.24-8.24 8.24zm4.52-6.17c-.25-.12-1.47-.72-1.7-.81-.23-.08-.39-.12-.56.12-.17.25-.64.81-.79.97-.14.17-.29.19-.54.07-.25-.12-1.05-.39-2-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.02-.38.11-.5.11-.11.25-.29.37-.43.12-.14.17-.25.25-.41.08-.17.04-.31-.02-.43s-.56-1.34-.76-1.84c-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.43.06-.66.31-.22.25-.86.84-.86 2.05s.88 2.38 1 2.54c.12.17 1.73 2.65 4.2 3.71.59.25 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.15-1.18-.07-.12-.22-.19-.47-.31z"/>
           </svg>
-          WhatsApp Bağlantısı
+          WhatsApp Pairing Code
         </div>
-        <h1 class="title" id="view-title">WhatsApp Hesabınızı Bağlayın</h1>
-        <p class="subtitle" id="view-subtitle">DockHosting backend üzerindeki WhatsApp soketine bağlanmak için aşağıdaki QR kodunu telefonunuzla okutun.</p>
+        <h1 class="title" id="view-title">WhatsApp Telefon Kodu ile Bağla</h1>
+        <p class="subtitle" id="view-subtitle">DockHosting backend tarafından üretilen 8 haneli kodu telefonunuzdan WhatsApp'a girin.</p>
       </div>
 
-      <!-- QR View -->
-      <div id="qr-section">
-        <div class="qr-wrapper">
-          <div class="qr-loading" id="qr-placeholder">
+      <!-- Pairing Section -->
+      <div id="pairing-section">
+        <div class="pairing-box">
+          <div class="pairing-label">Bağlantı Kodu (Pairing Code)</div>
+          <div class="pairing-code" id="code-display">
             <div class="spinner"></div>
-            <span id="qr-placeholder-text" style="font-size: 13px; font-weight: 500;">QR Kod Bekleniyor...</span>
           </div>
-          <canvas id="qr-canvas" class="qr-canvas" style="display: none;"></canvas>
-          <img id="qr-img" class="qr-image" src="" alt="WhatsApp QR Kodu" style="display: none;" />
+          <div class="pairing-phone">Hedef Numara: <strong>905102237729</strong></div>
         </div>
-        <!-- Live QR ID Badge -->
-        <div class="qr-id-badge" id="qr-id-display">DockHosting QR ID: -</div>
       </div>
 
       <!-- Connected View -->
@@ -479,7 +406,7 @@
 
       <!-- Status Indicator -->
       <div class="status-bar" id="status-bar">
-        <div class="status-dot waiting_qr pulse" id="status-dot"></div>
+        <div class="status-dot waiting_pairing_code pulse" id="status-dot"></div>
         <span id="status-text">Durum sorgulanıyor...</span>
       </div>
 
@@ -501,27 +428,15 @@
           </div>
           <div class="step-item">
             <div class="step-num">4</div>
-            <div>Kamerayı bu ekrandaki <strong>QR Koda</strong> doğru tutun</div>
+            <div>En alttaki <strong>Telefon Numarasıyla Bağla</strong> seçeneğine tıklayıp yukarıdaki kodu girin</div>
           </div>
-        </div>
-      </div>
-
-      <!-- Debug Section -->
-      <div class="debug-box">
-        <div class="debug-row">
-          <span class="debug-label">Backend:</span>
-          <span class="debug-value" id="debug-backend-val">-</span>
-        </div>
-        <div class="debug-row">
-          <span class="debug-label">API status:</span>
-          <span class="debug-status-badge waiting_qr" id="debug-status-val">Sorgulanıyor...</span>
         </div>
       </div>
     </div>
 
     <!-- Footer -->
     <div class="footer">
-      <span>WhatsApp AI Bot &bull; 7/24 Canlı Soket</span>
+      <span>WhatsApp AI Bot &bull; Pairing Code Engine</span>
     </div>
   </div>
 
@@ -529,18 +444,13 @@
     const STATUS_API_ENDPOINT = '/api/whatsapp/status';
     const LOGOUT_API_ENDPOINT = '/api/whatsapp/logout';
 
-    let displayedQrId = null;
     let currentStatus = 'starting';
     let isActionInProgress = false;
 
-    const qrSection = document.getElementById('qr-section');
-    const qrIdDisplay = document.getElementById('qr-id-display');
+    const pairingSection = document.getElementById('pairing-section');
+    const codeDisplay = document.getElementById('code-display');
     const connectedSection = document.getElementById('connected-section');
     const instructionsSection = document.getElementById('instructions-section');
-    const qrPlaceholder = document.getElementById('qr-placeholder');
-    const qrPlaceholderText = document.getElementById('qr-placeholder-text');
-    const qrCanvas = document.getElementById('qr-canvas');
-    const qrImg = document.getElementById('qr-img');
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
     const viewTitle = document.getElementById('view-title');
@@ -550,56 +460,6 @@
     const accJid = document.getElementById('acc-jid');
     const accTime = document.getElementById('acc-time');
 
-    const debugBackendVal = document.getElementById('debug-backend-val');
-    const debugStatusVal = document.getElementById('debug-status-val');
-
-    debugBackendVal.textContent = window.location.origin || 'https://whatsapp-chatbot.dockhosting.dev';
-
-    /**
-     * Render QR code STRICTLY from backend response `qr` string
-     */
-    function renderQrCode(qrString) {
-      if (!qrString) return;
-
-      if (qrString.startsWith('data:image')) {
-        qrImg.src = qrString;
-        qrImg.style.display = 'block';
-        qrCanvas.style.display = 'none';
-        qrPlaceholder.style.display = 'none';
-        return;
-      }
-
-      if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
-        window.QRCode.toCanvas(qrCanvas, qrString, {
-          width: 238,
-          margin: 1,
-          color: {
-            dark: '#111827',
-            light: '#ffffff'
-          }
-        }, function (error) {
-          if (error) {
-            console.error('QR Canvas error:', error);
-            qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(qrString);
-            qrImg.style.display = 'block';
-            qrCanvas.style.display = 'none';
-          } else {
-            qrCanvas.style.display = 'block';
-            qrImg.style.display = 'none';
-          }
-          qrPlaceholder.style.display = 'none';
-        });
-      } else {
-        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' + encodeURIComponent(qrString);
-        qrImg.style.display = 'block';
-        qrCanvas.style.display = 'none';
-        qrPlaceholder.style.display = 'none';
-      }
-    }
-
-    /**
-     * Fetch status directly from authoritative status API
-     */
     async function fetchStatus() {
       if (isActionInProgress) return;
 
@@ -622,14 +482,6 @@
         }
 
         const data = await response.json();
-
-        // Browser console log on every poll (Requirement 10)
-        console.log("[POLL]", {
-          status: data.status,
-          qrId: data.qrId,
-          time: Date.now()
-        });
-
         updateUI(data);
       } catch (err) {
         clearTimeout(timeoutId);
@@ -637,39 +489,17 @@
         if (currentStatus !== 'connected') {
           statusDot.className = 'status-dot disconnected';
           statusText.textContent = 'Backend sunucusuna ulaşılamıyor...';
-          debugStatusVal.className = 'debug-status-badge disconnected';
-          debugStatusVal.textContent = 'Bağlantı Hatası';
         }
       }
     }
 
-    /**
-     * Update UI strictly based on response
-     */
     function updateUI(data) {
       const status = data.status || 'disconnected';
-      const qrString = data.qr || null;
-      const qrId = data.qrId || null;
+      const pairingCode = data.pairingCode || null;
       currentStatus = status;
 
-      // Update Live QR ID Badge (Requirement 4 & 11)
-      if (qrId) {
-        qrIdDisplay.textContent = `DockHosting QR ID: ${qrId}`;
-        qrIdDisplay.style.display = 'block';
-      } else {
-        qrIdDisplay.textContent = 'DockHosting QR ID: -';
-        if (status === 'connected') {
-          qrIdDisplay.style.display = 'none';
-        }
-      }
-
-      // Update Debug Box status
-      debugStatusVal.className = `debug-status-badge ${status}`;
-      debugStatusVal.textContent = status;
-
       if (status === 'connected') {
-        displayedQrId = null;
-        qrSection.style.display = 'none';
+        pairingSection.style.display = 'none';
         instructionsSection.style.display = 'none';
         connectedSection.style.display = 'block';
 
@@ -685,65 +515,45 @@
           ? new Date(data.connectedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
           : 'Aktif';
 
-      } else if (status === 'waiting_qr') {
-        qrSection.style.display = 'block';
+      } else if (status === 'waiting_pairing_code') {
+        pairingSection.style.display = 'block';
         instructionsSection.style.display = 'block';
         connectedSection.style.display = 'none';
 
-        viewTitle.textContent = 'WhatsApp Hesabınızı Bağlayın';
-        viewSubtitle.textContent = 'Aşağıdaki QR kodunu telefonunuzdaki WhatsApp ile tarayın.';
+        viewTitle.textContent = 'WhatsApp Telefon Kodu ile Bağla';
+        viewSubtitle.textContent = 'Aşağıdaki 8 haneli kodu telefonunuzdaki WhatsApp\'a girin.';
 
-        statusDot.className = 'status-dot waiting_qr pulse';
-        statusText.textContent = 'QR kodunu telefonunuzla tarayın';
+        statusDot.className = 'status-dot waiting_pairing_code pulse';
+        statusText.textContent = 'Kodu WhatsApp > Telefon Numarası ile Bağla alanına girin';
 
-        // Requirement 5 & 6: Re-render immediately if qrId changed or new QR arrived
-        if (qrString && (qrId !== displayedQrId || !displayedQrId)) {
-          displayedQrId = qrId;
-          renderQrCode(qrString);
-        } else if (!qrString) {
-          displayedQrId = null;
-          qrCanvas.style.display = 'none';
-          qrImg.style.display = 'none';
-          qrPlaceholder.style.display = 'flex';
-          qrPlaceholderText.textContent = 'Yeni QR Üretiliyor...';
+        if (pairingCode) {
+          codeDisplay.textContent = pairingCode;
+        } else {
+          codeDisplay.innerHTML = '<div class="spinner"></div>';
         }
 
       } else if (status === 'connecting') {
-        displayedQrId = null;
-        qrSection.style.display = 'block';
+        pairingSection.style.display = 'block';
         instructionsSection.style.display = 'block';
         connectedSection.style.display = 'none';
 
         statusDot.className = 'status-dot connecting pulse';
         statusText.textContent = 'WhatsApp\'a bağlanılıyor...';
-
-        qrCanvas.style.display = 'none';
-        qrImg.style.display = 'none';
-        qrPlaceholder.style.display = 'flex';
-        qrPlaceholderText.textContent = 'Oturum doğrulanıyor...';
+        codeDisplay.innerHTML = '<div class="spinner"></div>';
 
       } else {
-        // Disconnected State
-        displayedQrId = null;
-        qrSection.style.display = 'block';
+        pairingSection.style.display = 'block';
         instructionsSection.style.display = 'block';
         connectedSection.style.display = 'none';
 
         statusDot.className = 'status-dot disconnected';
         statusText.textContent = 'Bağlantı bekleniyor...';
-
-        qrCanvas.style.display = 'none';
-        qrImg.style.display = 'none';
-        qrPlaceholder.style.display = 'flex';
-        qrPlaceholderText.textContent = 'QR Bekleniyor...';
+        codeDisplay.innerHTML = '<div class="spinner"></div>';
       }
     }
 
-    /**
-     * Send logout request
-     */
     async function handleLogout() {
-      if (!confirm('WhatsApp oturumunu kapatıp yeni QR kodu üretmek istiyor musunuz?')) {
+      if (!confirm('WhatsApp oturumunu kapatıp yeni bağlantı kodu üretmek istiyor musunuz?')) {
         return;
       }
 
@@ -759,31 +569,25 @@
           body: JSON.stringify({ sessionId: 'default' })
         });
       } catch (err) {
-        console.error('Logout request error:', err);
+        console.error('Logout error:', err);
       } finally {
         isActionInProgress = false;
         btn.disabled = false;
-        displayedQrId = null;
         setTimeout(fetchStatus, 500);
       }
     }
 
-    /**
-     * Resilient recursive polling loop (Never dies, recovers automatically)
-     */
     async function pollStatus() {
       try {
         await fetchStatus();
       } catch (err) {
         console.error("[POLL UNCAUGHT ERROR]", err);
       } finally {
-        // Poll every 1000ms during QR waiting / connecting, 3000ms when connected
         const delay = (currentStatus === 'connected') ? 3000 : 1000;
         setTimeout(pollStatus, delay);
       }
     }
 
-    // Start single continuous polling loop
     pollStatus();
   </script>
 </body>

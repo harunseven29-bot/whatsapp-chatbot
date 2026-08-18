@@ -1,6 +1,6 @@
 /**
  * WhatsApp Gemini Bot - Ultra-Lightweight Production Server
- * Instant Authoritative Memory State & QR Fingerprint Verification
+ * Instant Authoritative Memory State & Pairing-Code Architecture
  */
 
 require('dotenv').config();
@@ -22,8 +22,9 @@ const HOSTNAME = '0.0.0.0';
 
 async function bootstrap() {
   console.log('======================================================');
-  console.log('🚀 WhatsApp Gemini Bot - Production Server & Web UI');
+  console.log('🚀 WhatsApp Gemini Bot - Production Server & Pairing Code');
   console.log(`📁 Auth Klasörü: ${AUTH_DIR}`);
+  console.log(`📱 Pairing Numarası: ${process.env.PAIRING_NUMBER || '905102237729'}`);
   console.log(`🌐 Port: ${PORT}`);
   console.log('======================================================');
 
@@ -43,18 +44,12 @@ async function bootstrap() {
   });
 
   // 1. Authoritative Realtime Status API: GET /api/whatsapp/status
-  // Synchronous non-blocking response with QR fingerprint
+  // Synchronous non-blocking response
   app.get('/api/whatsapp/status', (req, res) => {
-    console.log('[STATUS API]', {
-      qrId: whatsappState.qrId,
-      status: whatsappState.status
-    });
-
     res.set('Cache-Control', 'no-store');
     return res.status(200).json({
       status: whatsappState.status,
-      qr: whatsappState.qr,
-      qrId: whatsappState.qrId,
+      pairingCode: whatsappState.pairingCode,
       jid: whatsappState.jid,
       userName: whatsappState.userName,
       connectedAt: whatsappState.connectedAt,
@@ -98,7 +93,7 @@ async function bootstrap() {
   app.get('/health', (req, res) => {
     res.status(200).json({
       status: 'healthy',
-      whatsapp: whatsappState.status === 'connected' ? 'connected' : (whatsappState.status === 'waiting_qr' ? 'waiting_qr_scan' : whatsappState.status),
+      whatsapp: whatsappState.status === 'connected' ? 'connected' : whatsappState.status,
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     });
@@ -110,7 +105,7 @@ async function bootstrap() {
     res.status(200).json({
       status: 'ok',
       whatsapp: whatsappState.status,
-      qrId: whatsappState.qrId,
+      pairingCode: whatsappState.pairingCode,
       user: whatsappState.userName || whatsappState.jid,
       memory,
       business: business.businessName,
