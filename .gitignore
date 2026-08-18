@@ -1,18 +1,9 @@
 node_modules/
-.next/
-coverage/
-.DS_Store
+auth/
+auth
+data/
 *.log
 .env
 .env*.local
 !.env.example
-
-# WhatsApp Baileys Auth Sessions
-auth
-auth/
-data/auth
-data/auth/
-data/
-auth_info_baileys/
-auth_info_baileys
-
+.DS_Store

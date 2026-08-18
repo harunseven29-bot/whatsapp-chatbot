@@ -1,7 +1,6 @@
-/* eslint-disable react-hooks/rules-of-hooks */
 /**
  * WhatsApp Connection Manager using @whiskeysockets/baileys
- * Production-ready for 24/7 Deployment on Northflank
+ * Ultra-lightweight backend for Wispbyte Free / 24/7 VPS
  */
 
 const {
@@ -14,20 +13,18 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcodeTerminal = require('qrcode-terminal');
-const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
 const { generateReply } = require('./assistant');
 
-// Auth Directory Setup (Configurable via AUTH_DIR env var for persistent storage)
-const DEFAULT_AUTH_DIR = path.resolve(__dirname, 'data', 'auth');
+// Auth Directory Setup (Default: ./auth, Wispbyte: /home/container/auth or custom)
+const DEFAULT_AUTH_DIR = path.resolve(__dirname, 'auth');
 const AUTH_DIR = process.env.AUTH_DIR ? path.resolve(process.env.AUTH_DIR) : DEFAULT_AUTH_DIR;
 
-// State holder for HTTP Server status monitoring
+// State holder for memory stats and health monitoring
 const clientState = {
   status: 'disconnected', // 'disconnected' | 'connecting' | 'connected' | 'qr_ready'
   qrString: null,
-  qrDataUrl: null,
   pairingCode: null,
   userJid: null,
   userName: null,
@@ -38,30 +35,19 @@ const clientState = {
     messagesSent: 0,
     errors: 0,
     lastActivity: null
-  },
-  recentLogs: []
+  }
 };
 
-// Global socket and startup state
+// Global socket and startup locks
 let waSocket = null;
 let isReconnecting = false;
 let isInitializing = false;
 let isStarted = false;
 
 /**
- * Append formatted log to state and console
+ * Clean logging helper
  */
 function logEvent(type, message, details = null) {
-  const timestamp = new Date().toISOString();
-  const logEntry = { timestamp, type, message, details };
-  
-  // Keep last 100 logs in memory for status dashboard
-  clientState.recentLogs.unshift(logEntry);
-  if (clientState.recentLogs.length > 100) {
-    clientState.recentLogs.pop();
-  }
-
-  // Terminal logging
   const prefix = `[WhatsApp - ${type.toUpperCase()}]`;
   if (details) {
     console.log(`${prefix} ${message}`, details);
@@ -71,7 +57,7 @@ function logEvent(type, message, details = null) {
 }
 
 /**
- * Extract clean plain text from any incoming WhatsApp message object
+ * Extract clean plain text from incoming WhatsApp message object
  */
 function extractTextMessage(msg) {
   if (!msg || !msg.message) return null;
@@ -118,19 +104,19 @@ async function startWhatsApp(isReconnect = false) {
       isLatest: true
     }));
 
-    logEvent('info', `Baileys başlatılıyor (v${version.join('.')}, isLatest: ${isLatest})`);
+    logEvent('info', `Baileys v${version.join('.')} başlatılıyor (isLatest: ${isLatest})`);
 
     // 3. Create WhatsApp Socket
     const sock = makeWASocket({
       version,
-      logger: pino({ level: 'silent' }), // Suppress noisy internal Baileys logs
-      printQRInTerminal: false, // We handle QR printing manually with qrcode-terminal
+      logger: pino({ level: 'silent' }), // Suppress internal noisy Baileys logs to save CPU/RAM
+      printQRInTerminal: false, // Handled manually with qrcode-terminal
       auth: {
         creds: state.creds,
         keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
       },
       browser: Browsers.ubuntu('Chrome'),
-      generateHighQualityLinkPreview: true,
+      generateHighQualityLinkPreview: false,
       syncFullHistory: false,
       markOnlineOnConnect: true,
       connectTimeoutMs: 60000,
@@ -151,7 +137,6 @@ async function startWhatsApp(isReconnect = false) {
         try {
           const code = await sock.requestPairingCode(pairingNumber);
           clientState.pairingCode = code;
-          logEvent('auth', `WhatsApp Eşleşme Kodu (Pairing Code): ${code}`);
           console.log(`\n========================================`);
           console.log(`🔑 WHATSAPP PAIRING CODE: ${code}`);
           console.log(`Telefonunuzdan WhatsApp > Bağlı Cihazlar > Telefon Numarası ile Bağla`);
@@ -174,24 +159,17 @@ async function startWhatsApp(isReconnect = false) {
         clientState.status = 'qr_ready';
         clientState.qrString = qr;
 
-        try {
-          clientState.qrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 6 });
-        } catch (err) {
-          console.error('[QR] DataURL generation failed:', err.message);
-        }
-
         console.log('\n======================================================');
         console.log('📱 WhatsApp QR Kodu Hazır! Telefonunuzla Taratın:');
         console.log('======================================================\n');
         qrcodeTerminal.generate(qr, { small: true });
-        logEvent('auth', 'WhatsApp QR kodu terminale basıldı ve web servisine aktarıldı.');
+        logEvent('auth', 'WhatsApp QR kodu terminale yazdırıldı.');
       }
 
       // Connection state changes
       if (connection === 'open') {
         clientState.status = 'connected';
         clientState.qrString = null;
-        clientState.qrDataUrl = null;
         clientState.pairingCode = null;
         clientState.connectedAt = new Date().toISOString();
         clientState.reconnectAttempts = 0;
@@ -215,14 +193,13 @@ async function startWhatsApp(isReconnect = false) {
 
         if (statusCode === DisconnectReason.loggedOut) {
           logEvent('hata', '❌ WhatsApp oturumu kapatıldı (Logged out). Lütfen auth klasörünü temizleyip tekrar QR taratın.');
-          // Clear auth files if explicitly logged out
           try {
             if (fs.existsSync(AUTH_DIR)) {
               fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-              logEvent('info', 'Eski auth verileri silindi.');
+              logEvent('info', 'Eski auth verileri temizlendi.');
             }
           } catch (e) {
-            console.error('[Auth] Failed to clear logged out auth directory:', e.message);
+            console.error('[Auth] Temizleme hatası:', e.message);
           }
           // Restart to allow new QR generation
           setTimeout(() => {
@@ -246,28 +223,27 @@ async function startWhatsApp(isReconnect = false) {
 
     // 7. Incoming Messages Handler
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-      // Process only new messages (type === 'notify')
       if (type !== 'notify' || !Array.isArray(messages)) return;
 
       for (const msg of messages) {
         try {
-          // Rule 9: Do not reply to own messages
+          // Rule 1: Do not reply to own messages
           if (msg.key.fromMe) continue;
 
           const remoteJid = msg.key.remoteJid;
           if (!remoteJid) continue;
 
-          // Rule 10: Ignore group messages by default (@g.us)
+          // Rule 2: Ignore group messages by default (@g.us)
           if (remoteJid.endsWith('@g.us')) {
             continue;
           }
 
-          // Rule 10: Ignore broadcast / status updates
+          // Rule 3: Ignore broadcast / status updates
           if (remoteJid === 'status@broadcast' || remoteJid.includes('@broadcast')) {
             continue;
           }
 
-          // Rule 8: Process only text messages
+          // Rule 4: Process only text messages
           const userText = extractTextMessage(msg);
           if (!userText || typeof userText !== 'string' || userText.trim().length === 0) {
             continue;
@@ -277,30 +253,30 @@ async function startWhatsApp(isReconnect = false) {
           clientState.stats.lastActivity = new Date().toISOString();
 
           const senderName = msg.pushName || remoteJid.split('@')[0];
-          logEvent('mesaj', `📩 Mesaj alındı: ${senderName} (${remoteJid}): "${userText}"`);
+          logEvent('mesaj', `📩 [${senderName} (${remoteJid})]: "${userText}"`);
 
-          // Send "Typing..." presence indicator
+          // Send "typing..." presence
           try {
             await sock.sendPresenceUpdate('composing', remoteJid);
           } catch (presenceErr) {
-            // Presence update non-critical failure
+            // non-fatal
           }
 
-          // Rule 11: Send message to Gemini AI
+          // Generate response with Gemini AI
           const aiResponse = await generateReply(remoteJid, userText);
 
-          // Stop typing presence
+          // Stop "typing..." presence
           try {
             await sock.sendPresenceUpdate('paused', remoteJid);
           } catch (e) {}
 
-          // Rule 12: Send Gemini response back to the same WhatsApp user
+          // Send Gemini AI response back
           await sock.sendMessage(remoteJid, {
             text: aiResponse
           });
 
           clientState.stats.messagesSent += 1;
-          logEvent('cevap', `🤖 Gemini cevap verdi -> ${senderName} (${remoteJid}): "${aiResponse.substring(0, 80)}..."`);
+          logEvent('cevap', `🤖 [Yanıt -> ${senderName}]: "${aiResponse.substring(0, 80)}..."`);
         } catch (msgErr) {
           clientState.stats.errors += 1;
           logEvent('hata', `Mesaj işleme hatası: ${msgErr.message}`);
@@ -315,7 +291,6 @@ async function startWhatsApp(isReconnect = false) {
     clientState.stats.errors += 1;
     logEvent('hata', `WhatsApp başlatma hatası: ${initErr.message}`);
     
-    // Auto retry initialization on failure
     setTimeout(() => {
       startWhatsApp(true);
     }, 5000);
@@ -335,7 +310,7 @@ function getWhatsAppStatus() {
 }
 
 /**
- * Disconnect or restart socket gracefully
+ * Disconnect socket gracefully
  */
 async function disconnectWhatsApp() {
   if (waSocket) {

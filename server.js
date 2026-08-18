@@ -1,79 +1,89 @@
 /**
- * WhatsApp AI Chatbot - Unified Production Server
- * Combines Next.js App Router UI and Baileys WhatsApp Socket on a single PORT.
- * Optimized for 24/7 Deployment on Northflank.
+ * WhatsApp Gemini Bot - Ultra-Lightweight Production Server
+ * Designed for 24/7 low-resource execution (Wispbyte Free / Northflank / VPS)
  */
 
 require('dotenv').config();
 
 const express = require('express');
-const next = require('next');
-const path = require('path');
-const fs = require('fs');
 const { startWhatsApp, disconnectWhatsApp, getWhatsAppStatus, AUTH_DIR } = require('./whatsapp');
 const { getBusinessData } = require('./business');
+const { getMemoryStats } = require('./assistant');
 
-const hasProductionBuild = fs.existsSync(path.join(__dirname, '.next', 'prerender-manifest.json'));
-const dev = process.env.NODE_ENV !== 'production' || !hasProductionBuild;
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOSTNAME = '0.0.0.0';
 
-const app = next({ dev, hostname: HOSTNAME, port: PORT, dir: __dirname });
-const handle = app.getRequestHandler();
-
 async function bootstrap() {
   console.log('======================================================');
-  console.log('🚀 WhatsApp AI Chatbot Server Başlatılıyor...');
+  console.log('🚀 WhatsApp Gemini Bot - Ultra-Light Backend');
   console.log('======================================================');
 
   // 1. Environment & Config Verification
   if (!process.env.GEMINI_API_KEY) {
-    console.warn('⚠️  UYARI: GEMINI_API_KEY environment variable bulunamadı!');
-    console.warn('   Yapay zeka yanıtları için lütfen GEMINI_API_KEY değerini tanımlayın.');
+    console.warn('⚠️  UYARI: GEMINI_API_KEY tanımlanmadı!');
+    console.warn('   Yapay zeka yanıtları için lütfen .env dosyasına GEMINI_API_KEY ekleyin.');
   } else {
-    console.log('🔑 Gemini API Key: Yüklendi (Güvenli şekilde korundu).');
+    console.log('🔑 Gemini API Key: Yüklendi.');
   }
 
   console.log(`📁 Auth Klasörü (AUTH_DIR): ${AUTH_DIR}`);
-  console.log(`🌐 Port: ${PORT} (NODE_ENV: ${process.env.NODE_ENV || 'development'})`);
+  console.log(`🌐 Port: ${PORT} (NODE_ENV: ${process.env.NODE_ENV || 'production'})`);
 
   const business = getBusinessData();
   console.log(`🏢 İşletme: ${business.businessName}`);
   console.log(`💼 Tanımlı Hizmet Sayısı: ${business.services?.length || 0}`);
 
-  // 2. Prepare Next.js
-  console.log('[Next.js] Uygulama hazırlanıyor...');
-  await app.prepare();
-  console.log('[Next.js] Hazır.');
+  // 2. Express Server Setup
+  const app = express();
+  app.use(express.json());
 
-  const server = express();
+  // Root endpoint
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      status: 'ok',
+      service: 'WhatsApp Gemini Bot'
+    });
+  });
 
-  // Fast Northflank Health Check (GET /health -> HTTP 200)
-  server.get('/health', (req, res) => {
+  // Health check endpoint (for Wispbyte / uptime monitors)
+  app.get('/health', (req, res) => {
     const wa = getWhatsAppStatus();
     res.status(200).json({
       status: 'healthy',
       whatsapp: wa.status === 'connected' ? 'connected' : (wa.status === 'qr_ready' ? 'waiting_qr_scan' : 'disconnected'),
+      uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     });
   });
 
-  // All other HTTP requests are handled by Next.js App Router (UI + API routes)
-  server.use((req, res) => {
-    return handle(req, res);
+  // Optional status overview endpoint
+  app.get('/status', (req, res) => {
+    const wa = getWhatsAppStatus();
+    const memory = getMemoryStats();
+    res.status(200).json({
+      status: 'ok',
+      whatsapp: wa.status,
+      user: wa.userName || wa.userJid,
+      stats: wa.stats,
+      memory,
+      business: business.businessName,
+      hasApiKey: !!process.env.GEMINI_API_KEY,
+      uptimeSeconds: Math.floor(process.uptime()),
+      timestamp: new Date().toISOString()
+    });
   });
 
-  // 3. Start Single HTTP Listener
-  const httpServer = server.listen(PORT, HOSTNAME, async (err) => {
+  // 3. Start HTTP Listener & Baileys Socket
+  const httpServer = app.listen(PORT, HOSTNAME, async (err) => {
     if (err) {
-      console.error('❌ Sunucu portu dinleyemedi:', err);
+      console.error('❌ HTTP sunucu başlatılamadı:', err.message);
       process.exit(1);
     }
 
-    console.log(`[HTTP Server] Aktif ve dinliyor: http://localhost:${PORT}`);
-    console.log(`[HTTP Server] Health check: http://localhost:${PORT}/health`);
+    console.log(`[HTTP] Sunucu aktif: http://localhost:${PORT}`);
+    console.log(`[HTTP] Health check: http://localhost:${PORT}/health`);
 
-    // 4. Start WhatsApp Baileys Socket (Single instance)
+    // 4. Start Baileys WhatsApp Socket (Single instance)
     try {
       console.log('[WhatsApp] Baileys soket bağlantısı başlatılıyor...');
       await startWhatsApp();
@@ -88,7 +98,7 @@ async function bootstrap() {
 
   // Graceful Shutdown Handler
   const shutdown = async (signal) => {
-    console.log(`\n[Shutdown] ${signal} sinyali alındı. Servisler güvenli kapatılıyor...`);
+    console.log(`\n[Shutdown] ${signal} sinyali alındı. Güvenli kapatılıyor...`);
     try {
       await disconnectWhatsApp();
     } catch (e) {
@@ -113,6 +123,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-  console.error('❌ Sunucu başlatma hatası:', err);
+  console.error('❌ Sunucu bootstrap hatası:', err);
   process.exit(1);
 });

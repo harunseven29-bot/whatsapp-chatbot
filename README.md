@@ -1,190 +1,107 @@
-# 🤖 WhatsApp AI Chatbot Backend (Baileys + Google Gemini)
+# 🤖 WhatsApp Gemini AI Chatbot (Ultra-Lightweight Backend)
 
-Northflank ve benzeri bulut platformlarında 7/24 kesintisiz çalışacak şekilde tasarlanmış, **Meta Cloud API gerektirmeyen**, Baileys ve Google Gemini 3.7 Flash destekli akıllı WhatsApp satış ve randevu asistanı backend'i.
+Wispbyte Free, Northflank veya herhangi bir düşük kaynaklı VPS/Container üzerinde **7/24 kesintisiz ve minimum RAM/CPU (30-50MB RAM)** ile çalışmak üzere optimize edilmiş, saf Node.js WhatsApp yapay zeka asistanı.
 
----
-
-## 🏗️ Mimari Şema
-
-```text
-       ┌───────────────┐
-       │   WhatsApp    │ (Kullanıcı / Danışan)
-       └───────┬───────┘
-               │
-               ▼
-       ┌───────────────┐
-       │    Baileys    │ (@whiskeysockets/baileys - Web Socket)
-       └───────┬───────┘
-               │
-               ▼
-       ┌───────────────┐
-       │ Node.js Server│ (Kalıcı Auth, Hafıza & İşletme Kuralları)
-       └───────┬───────┘
-               │
-               ▼
-       ┌───────────────┐
-       │  Gemini API   │ (Google Gemini 3.7 Flash - Akıllı Model)
-       └───────────────┘
-```
+Frontend, React, Next.js veya derleme (build) araçları içermez. **Sıfır derleme süresiyle doğrudan `node server.js` ile çalışır.**
 
 ---
 
-## ✨ Özellikler
+## ⚡ Özellikler
 
-1. **Baileys ile Tam Entegrasyon**: Meta Business Cloud API doğrulaması gerektirmeden doğrudan WhatsApp Web protokolü üzerinden bağlanır.
-2. **Kalıcı Oturum (Session Persistence)**: `AUTH_DIR` üzerinde saklanan kimlik doğrulama verileri sayesinde sunucu veya container yeniden başlatıldığında **tekrar QR kod istemeden** anında bağlanır.
-3. **Otomatik Yeniden Bağlanma (Auto-Reconnect)**: Ağ kopması, geçici sunucu kesintisi durumlarında otomatik olarak yeniden bağlanır.
-4. **Google Gemini 3.7 Flash**: Hızlı, doğal Türkçe konuşan ve işletme kurallarına sadık yapay zeka asistanı.
-5. **Dinamik `business.json` Context**: İşletme adı, hizmetler, fiyatlar, adres, çalışma saatleri ve kurallar dinamik olarak Gemini sistem promptuna enjekte edilir.
-6. **Konuşma Hafızası (15 Mesaj)**: Her WhatsApp kullanıcısı için son 15 mesajlık sohbet geçmişi hafızada tutulur. Kullanıcıdan aynı bilgiyi mükerrer istemez.
-7. **İnsan Yetkiliye Devir (Human Agent Handover)**: Kullanıcı yetkili, müşteri temsilcisi veya insan desteği istediğinde durumu algılayıp uygun yönlendirmeyi yapar.
-8. **Northflank Uyumlu HTTP Sunucusu**:
-   - `GET /health` → `HTTP 200` (Northflank Health Check için)
-   - `GET /` → `{"status": "ok", "whatsapp": "connected"}` veya Web Dashboard
-   - `GET /qr` → Tarayıcıdan QR kod tarama
-   - `POST /api/test-chat` → WhatsApp'a ihtiyaç duymadan AI'ı test etme simülatörü
+- **Saf Node.js & Express:** Düşük bellek tüketimi, anında başlama.
+- **WhatsApp Entegrasyonu:** `@whiskeysockets/baileys` ile doğrudan WhatsApp Web soket bağlantısı.
+- **Yapay Zeka:** `@google/genai` (Gemini 3.7 Flash) ile bağlamsal, samimi ve Türkçe satış/randevu yanıtları.
+- **Konuşma Hafızası:** Müşterilerin söylediklerini hatırlayan akıllı oturum yönetimi (24 saat TTL).
+- **Canlı/İnsan Temsilciye Devir:** Müşteri yetkili talep ettiğinde otomatik tespit ve yönlendirme.
+- **Kalıcı Oturum:** `AUTH_DIR` desteği ile sunucu yeniden başlasa bile tekrar QR okutmaya gerek kalmaz.
+- **QR & Pairing Code:** Terminalden anında ASCII QR kod taratma veya numara ile 8 haneli pairing code.
+- **İşletme Yapılandırması:** `business.json` üzerinden dinamik hizmet, fiyat, kural ve çalışma saati yönetimi.
+- **Uptime & Health Check:** `GET /health` ve `GET /` uç noktaları ile 7/24 izleme desteği.
 
 ---
 
 ## 📁 Proje Dosya Yapısı
 
 ```text
-├── business.json        # İşletme bilgileri, hizmetler, fiyatlar ve kurallar
-├── business.js          # business.json okuyucu ve dinamik system prompt üretici
-├── assistant.js         # Gemini API bağlantısı, konuşma hafızası ve insan devir mantığı
-├── whatsapp.js          # Baileys WhatsApp bağlantısı, session yönetimi ve mesaj filtreleri
-├── server.js            # Express HTTP server (Northflank /health ve web arayüzü)
-├── index.js             # Ana başlatıcı (Bootstrap & Graceful Shutdown)
-├── package.json         # Bağımlılıklar ve npm scriptleri
-├── .env.example         # Çevre değişkenleri şablonu
-├── .gitignore           # Git hariç tutma kuralları
-└── README.md            # Detaylı kurulum ve deployment kılavuzu
+├── package.json        # Yalın ve hafif bağımlılıklar (Sıfır build aracı)
+├── server.js           # Express HTTP sunucusu ve Baileys başlatıcı
+├── whatsapp.js         # Baileys soket, QR terminal ve mesaj dinleyicisi
+├── assistant.js        # Gemini AI asistanı, konuşma hafızası ve devir mantığı
+├── business.js         # İşletme profili ve dinamik sistem prompt üretici
+├── business.json       # İşletme adı, hizmetler, fiyatlar ve kurallar
+├── .env.example        # Örnek çevre değişkenleri
+├── .gitignore          # Git hariç tutma kuralları (auth, node_modules)
+└── README.md           # Kurulum ve dağıtım rehberi
 ```
 
 ---
 
-## 🚀 Hızlı Başlangıç (Lokal Geliştirme)
+## 🚀 Hızlı Başlangıç (Yerel Çalıştırma)
 
-### 1. Gereksinimler
-- Node.js (v18, v20 veya üzeri)
-- Google Gemini API Key ([Google AI Studio](https://aistudio.google.com)'dan ücretsiz alınabilir)
-
-### 2. Kurulum
+### 1. Bağımlılıkları Yükleyin
 ```bash
-# Bağımlılıkları yükleyin
-npm install
+npm install --omit=dev
+```
 
-# .env dosyasını oluşturun
+### 2. Ortam Değişkenlerini Tanımlayın
+`.env.example` dosyasını `.env` olarak kopyalayın ve Gemini API anahtarınızı girin:
+```bash
 cp .env.example .env
 ```
 
-### 3. `.env` Yapılandırması
-`.env` dosyanızı açıp API anahtarınızı girin:
 ```env
-GEMINI_API_KEY="AIzaSy..."
-AUTH_DIR="./data/auth"
+GEMINI_API_KEY=AIzaSy...
+AUTH_DIR=./auth
 PORT=3000
+PAIRING_NUMBER=
 ```
 
-### 4. Uygulamayı Başlatma
+> **Not:** Gemini API anahtarını [Google AI Studio](https://aistudio.google.com)'dan ücretsiz alabilirsiniz.
+
+### 3. Sunucuyu Başlatın
 ```bash
 npm start
 ```
 
-Terminalde beliren QR kodu WhatsApp uygulamanızdan (**Bağlı Cihazlar > Cihaz Bağla**) taratın.
-Oturum `./data/auth` klasörüne kaydedilecek ve bir daha QR istemeyecektir.
+Terminalde beliren **QR Kodu** telefonunuzdaki WhatsApp uygulamasından (**Bağlı Cihazlar > Cihaz Bağla**) taratın.
 
 ---
 
-## ☁️ Northflank 24/7 Deployment Kılavuzu
+## ☁️ Wispbyte Free / Container Üzerinde 7/24 Dağıtım
 
-Northflank üzerinde kesintisiz 7/24 çalıştırmak için aşağıdaki adımları izleyin:
-
-### Adım 1: Depoyu (Repository) Northflank'e Ekleyin
-1. Northflank Dashboard'a gidin.
-2. **Create New Service** > **Deployment Service** seçeneğine tıklayın.
-3. GitHub / Git deponuzu bağlayın.
-4. **Build Type**: `Buildpack` (veya `Dockerfile`) seçin. Node.js otomatik algılanacaktır.
-
-### Adım 2: Persistent Volume Ekleme (ÖNEMLİ!)
-WhatsApp oturumunun sunucu yeniden başladığında kaybolmaması için kalıcı disk alanı bağlamalısınız:
-1. Northflank servis ayarlarında **Volumes** sekmesine gidin.
-2. **Add Volume** butonuna basın.
-3. **Mount Path**: `/data/auth`
-4. **Size**: `1 GB` (Yeterlidir).
-
-### Adım 3: Environment Variables (Çevre Değişkenleri)
-Northflank **Environment** sekmesinde şu değişkenleri ekleyin:
-
-| Değişken Adı | Değer | Açıklama |
-|---|---|---|
-| `GEMINI_API_KEY` | `AIzaSy...` | Google Gemini API Anahtarınız |
-| `AUTH_DIR` | `/data/auth` | Kalıcı diske bağlanan auth yolu |
-| `PORT` | `3000` | HTTP port numarası |
-
-### Adım 4: Health Check Ayarı
-1. Northflank servis ayarlarında **Health Checks** sekmesine gidin.
-2. **Type**: `HTTP`
-3. **Path**: `/health`
-4. **Port**: `3000`
-
-### Adım 5: İlk Bağlantı ve QR Kod Tarama
-1. Servis deploy edildikten sonra Northflank **Logs** sekmesini açın.
-2. Veya servisin genel URL'ini tarayıcıda açın (örn: `https://your-service.northflank.app/`).
-3. Ekranda veya loglarda çıkan QR kodu WhatsApp ile taratın.
-4. WhatsApp bağlandıktan sonra bot 7/24 çalışacak ve yeniden başlatmalarda tekrar QR istemeyecektir!
+1. Wispbyte panelinde **Node.js** sunucusu oluşturun.
+2. Dosyaları yükleyin veya Git repository'nizi bağlayın.
+3. Çevre değişkenlerini (Environment Variables) tanımlayın:
+   - `GEMINI_API_KEY`: Google Gemini API anahtarınız
+   - `AUTH_DIR`: `/home/container/auth` (veya varsayılan `./auth`)
+   - `PORT`: `3000` (veya panelin atadığı port)
+   - `NODE_ENV`: `production`
+4. Başlatma komutu olarak:
+   ```bash
+   node server.js
+   ```
+5. Sunucu konsolunda beliren QR kodu telefonunuzla taratın. Oturum `/home/container/auth` klasöründe kalıcı olarak saklanacaktır.
 
 ---
 
-## ⚙️ `business.json` Özelleştirme
+## 🌐 API Uç Noktaları
 
-Botun işletmenize özel konuşması için `business.json` dosyasını düzenleyin:
-
-```json
-{
-  "businessName": "İşletmenizin Adı",
-  "description": "Faaliyet alanınızın kısa tanımı",
-  "services": [
-    {
-      "id": "hizmet-1",
-      "name": "Örnek Hizmet Adı",
-      "description": "Hizmet detayları",
-      "durationMinutes": 60,
-      "price": "1.500 TL"
-    }
-  ],
-  "prices": {
-    "currency": "TRY",
-    "paymentMethods": "Kredi Kartı, Havale, Nakit",
-    "cancellationPolicy": "En az 24 saat önceden haber verilmelidir."
-  },
-  "address": "İşletme açık adresiniz",
-  "openingHours": {
-    "weekdays": "09:00 - 19:00",
-    "saturday": "10:00 - 18:00",
-    "sunday": "Kapalı"
-  },
-  "phone": "+90 5XX XXX XX XX",
-  "instagram": "@isletmeniz",
-  "rules": [
-    "Kibar ve yardımsever Türkçe konuş.",
-    "Bilinmeyen fiyat uydurma.",
-    "Randevu alırken İsim-Soyisim ve tercih edilen tarihi sor."
-  ],
-  "systemPrompt": "Sen işletmenin akıllı WhatsApp satış ve randevu asistanısın."
-}
-```
+| Metot | Uç Nokta | Açıklama |
+| :--- | :--- | :--- |
+| `GET` | `/` | Servis durum kontrolü (JSON) |
+| `GET` | `/health` | Wispbyte / Uptime robotları için HTTP 200 Health Check |
+| `GET` | `/status` | WhatsApp bağlantı durumu, bellek istatistikleri ve bot verileri |
 
 ---
 
-## 🧠 Konuşma Hafızası ve Veritabanı Genişletme
+## ⚙️ İşletme Bilgilerini Özelleştirme
 
-Uygulama varsayılan olarak kullanıcı başına son **15 mesajı** RAM'de tutar (`assistant.js`).
-İleride veritabanına taşımak isterseniz `assistant.js` içindeki `getHistory()` ve `addMessage()` fonksiyonlarını Redis, PostgreSQL veya Firestore adaptörlerine kolayca bağlayabilirsiniz.
+`business.json` dosyasını açarak işletmenize ait bilgileri düzenleyebilirsiniz:
+- `businessName`: İşletmenizin adı
+- `services`: Sunduğunuz hizmetler, süreleri ve fiyatları
+- `openingHours`: Çalışma gün ve saatleri
+- `address`, `phone`, `instagram`: İletişim bilgileri
+- `rules`: Botun uyması gereken özel talimatlar
+- `systemPrompt`: Botun ana rolü ve karakteri
 
----
-
-## 🔒 Güvenlik Notları
-- API Key veya hassas kimlik bilgileri kaynak koduna yazılmamıştır.
-- Loglarda API anahtarı filtrelenir ve gösterilmez.
-- Grup mesajları ve botun kendi mesajları otomatik olarak filtrelenir.
+Yapılan değişiklikler anında yapay zeka asistanı tarafından kullanılacaktır.
