@@ -7,6 +7,7 @@ require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const {
   startWhatsApp,
   disconnectWhatsApp,
@@ -65,6 +66,40 @@ async function bootstrap() {
       return res.status(200).json(result);
     } catch (err) {
       return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Temporary Debug Auth Reset API: POST /api/debug/reset-auth
+  app.post('/api/debug/reset-auth', async (req, res) => {
+    try {
+      // 1. WhatsApp socket varsa kapat
+      await disconnectWhatsApp('default');
+
+      // 2. AUTH_DIR içindeki tüm auth dosyalarını sil
+      fs.rmSync(AUTH_DIR, {
+        recursive: true,
+        force: true
+      });
+
+      // 3. AUTH_DIR klasörünü yeniden oluştur
+      fs.mkdirSync(AUTH_DIR, {
+        recursive: true
+      });
+
+      console.log('[DEBUG] Auth sıfırlandı:', AUTH_DIR);
+
+      // 4. JSON dön
+      return res.status(200).json({
+        success: true,
+        authDir: AUTH_DIR
+      });
+    } catch (err) {
+      console.error('[DEBUG] Auth sıfırlama hatası:', err.message);
+      return res.status(500).json({
+        success: false,
+        error: err.message,
+        authDir: AUTH_DIR
+      });
     }
   });
 
