@@ -1,6 +1,6 @@
 /**
  * WhatsApp Gemini Bot - Ultra-Lightweight Production Server
- * Instant Authoritative Memory State & Baileys Connection
+ * Instant Authoritative Memory State & QR Fingerprint Verification
  */
 
 require('dotenv').config();
@@ -43,11 +43,23 @@ async function bootstrap() {
   });
 
   // 1. Authoritative Realtime Status API: GET /api/whatsapp/status
-  // Must return in <1ms without any async waits or socket blocking
+  // Synchronous non-blocking response with QR fingerprint
   app.get('/api/whatsapp/status', (req, res) => {
-    console.log('[HTTP] GET /api/whatsapp/status', whatsappState.status);
+    console.log('[STATUS API]', {
+      qrId: whatsappState.qrId,
+      status: whatsappState.status
+    });
+
     res.set('Cache-Control', 'no-store');
-    return res.status(200).json(whatsappState);
+    return res.status(200).json({
+      status: whatsappState.status,
+      qr: whatsappState.qr,
+      qrId: whatsappState.qrId,
+      jid: whatsappState.jid,
+      userName: whatsappState.userName,
+      connectedAt: whatsappState.connectedAt,
+      updatedAt: whatsappState.updatedAt
+    });
   });
 
   // 2. WhatsApp Logout API: POST /api/whatsapp/logout
@@ -98,6 +110,7 @@ async function bootstrap() {
     res.status(200).json({
       status: 'ok',
       whatsapp: whatsappState.status,
+      qrId: whatsappState.qrId,
       user: whatsappState.userName || whatsappState.jid,
       memory,
       business: business.businessName,
@@ -107,7 +120,7 @@ async function bootstrap() {
     });
   });
 
-  // 7. Start HTTP Listener & Baileys Background Socket
+  // 7. Start HTTP Listener & SINGLE Baileys Background Socket
   const httpServer = app.listen(PORT, HOSTNAME, async (err) => {
     if (err) {
       console.error('❌ HTTP sunucu başlatılamadı:', err.message);
@@ -119,9 +132,9 @@ async function bootstrap() {
     console.log(`[HTTP] Health Check: http://localhost:${PORT}/health`);
     console.log(`[HTTP] Status API: http://localhost:${PORT}/api/whatsapp/status`);
 
-    // Start Baileys in background
+    // Start single Baileys instance in background
     try {
-      console.log('[WhatsApp] Baileys soket başlatılıyor...');
+      console.log('[WhatsApp] Tekil Baileys soketi başlatılıyor...');
       await startWhatsApp('default');
     } catch (waErr) {
       console.error('❌ WhatsApp başlatma hatası:', waErr.message);

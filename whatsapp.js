@@ -2,6 +2,7 @@
  * WhatsApp Connection Manager using @whiskeysockets/baileys
  * Ultra-lightweight backend with Multi-session ready architecture
  * Resilient 24/7 reconnection engine with Baileys Stream & 515/503 handlers
+ * Includes SHA256 QR Fingerprint verification
  */
 
 const {
@@ -14,6 +15,7 @@ const {
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcodeTerminal = require('qrcode-terminal');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { generateReply } = require('./assistant');
@@ -24,11 +26,20 @@ const BASE_AUTH_DIR = process.env.AUTH_DIR
   : path.resolve(__dirname, 'auth');
 
 /**
+ * QR Fingerprint Generator (SHA256 12-char hex)
+ */
+function getQrId(qr) {
+  if (!qr) return null;
+  return crypto.createHash('sha256').update(qr).digest('hex').slice(0, 12);
+}
+
+/**
  * Authoritative in-memory state returned instantly by /api/whatsapp/status
  */
 const whatsappState = {
   status: "starting", // "starting" | "connecting" | "waiting_qr" | "connected" | "disconnected"
   qr: null,
+  qrId: null,
   jid: null,
   userName: null,
   connectedAt: null,
@@ -113,7 +124,7 @@ function cleanupSocket(session) {
 }
 
 /**
- * Starts WhatsApp socket connection with auto-healing
+ * Starts WhatsApp socket connection with auto-healing (guaranteed SINGLE instance)
  */
 async function startWhatsApp(sessionId = 'default', isReconnect = false) {
   const session = getOrCreateSession(sessionId);
@@ -159,7 +170,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
       logEvent('info', `Baileys v${version.join('.')} başlatılıyor (isLatest: ${isLatest})`, null, sessionId);
     }
 
-    // 3. Create WhatsApp Socket
+    // 3. Create SINGLE WhatsApp Socket
     const sock = makeWASocket({
       version,
       logger: pino({ level: 'silent' }),
@@ -211,32 +222,34 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      console.log("[DEBUG] CONNECTION_UPDATE", {
+      console.log('[WA EVENT]', {
         connection,
         hasQr: !!qr,
-        hasLastDisconnect: !!lastDisconnect
+        qrId: whatsappState.qrId
       });
 
       // QR Code handling
       if (qr) {
-        console.log("[DEBUG] BAILEYS_QR_NEW", {
-          length: qr.length,
-          prefix: qr.slice(0, 12),
-          updatedAt: Date.now()
-        });
+        const currentQrId = getQrId(qr);
 
         // Update Authoritative State
         whatsappState.status = 'waiting_qr';
         whatsappState.qr = qr;
+        whatsappState.qrId = currentQrId;
         whatsappState.updatedAt = Date.now();
         session.status = 'waiting_qr';
 
+        console.log('[QR ACTIVE]', {
+          qrId: currentQrId,
+          length: qr.length
+        });
+
         // Print clean QR to terminal
         console.log('\n======================================================');
-        console.log(`📱 WhatsApp QR Kodu Hazır (${sessionId})! Web: /connect`);
+        console.log(`📱 WhatsApp QR Kodu Hazır (${sessionId})! [QR ID: ${currentQrId}] Web: /connect`);
         console.log('======================================================\n');
         qrcodeTerminal.generate(qr, { small: true });
-        logEvent('auth', 'Yeni WhatsApp QR kodu oluşturuldu.', null, sessionId);
+        logEvent('auth', `Yeni WhatsApp QR kodu oluşturuldu (QR ID: ${currentQrId}).`, null, sessionId);
       }
 
       // Connection open
@@ -246,6 +259,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
         // Update Authoritative State
         whatsappState.status = 'connected';
         whatsappState.qr = null;
+        whatsappState.qrId = null;
         whatsappState.jid = user?.id || null;
         whatsappState.userName = user?.name || 'WhatsApp Hesabı';
         whatsappState.connectedAt = Date.now();
@@ -274,6 +288,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           whatsappState.jid = null;
           whatsappState.userName = null;
           whatsappState.qr = null;
+          whatsappState.qrId = null;
 
           try {
             if (fs.existsSync(session.authDir)) {
@@ -398,6 +413,7 @@ async function logoutWhatsApp(sessionId = 'default') {
 
   whatsappState.status = 'disconnected';
   whatsappState.qr = null;
+  whatsappState.qrId = null;
   whatsappState.jid = null;
   whatsappState.userName = null;
   whatsappState.connectedAt = null;
@@ -444,5 +460,6 @@ module.exports = {
   logoutWhatsApp,
   disconnectWhatsApp,
   whatsappState,
+  getQrId,
   AUTH_DIR: BASE_AUTH_DIR
 };
