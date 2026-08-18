@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lightweight Client-side QR Code Generator -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
   <style>
     :root {
       --bg-color: #0c111d;
@@ -127,6 +129,13 @@
       position: relative;
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
       transition: all 0.3s ease;
+    }
+
+    .qr-canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+      border-radius: 4px;
     }
 
     .qr-image {
@@ -342,31 +351,59 @@
       color: #fca5a5;
     }
 
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--text-main);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      margin-top: 12px;
+    /* Debug Information Box */
+    .debug-box {
+      margin-top: 20px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px dashed rgba(148, 163, 184, 0.25);
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
     }
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.14);
+
+    .debug-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
     }
+    .debug-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .debug-label {
+      color: var(--text-subtle);
+      font-weight: 500;
+    }
+
+    .debug-value {
+      font-family: monospace;
+      font-size: 11.5px;
+      color: #38bdf8;
+      word-break: break-all;
+    }
+
+    .debug-status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 10.5px;
+    }
+    .debug-status-badge.waiting_qr { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .debug-status-badge.connecting { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .debug-status-badge.connected { background: rgba(37, 211, 102, 0.2); color: #4ade80; }
+    .debug-status-badge.disconnected { background: rgba(239, 68, 68, 0.2); color: #f87171; }
 
     /* Footer */
     .footer {
       text-align: center;
-      margin-top: 20px;
+      margin-top: 16px;
       font-size: 12px;
       color: var(--text-subtle);
-    }
-
-    .live-dot {
-      display: inline-block;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--wa-green);
-      margin-right: 6px;
     }
   </style>
 </head>
@@ -382,7 +419,7 @@
           WhatsApp Bağlantısı
         </div>
         <h1 class="title" id="view-title">WhatsApp Hesabınızı Bağlayın</h1>
-        <p class="subtitle" id="view-subtitle">Telefonunuzdaki WhatsApp uygulaması ile aşağıdaki QR kodunu tarayarak yapay zeka asistanını aktif edin.</p>
+        <p class="subtitle" id="view-subtitle">DockHosting backend üzerindeki WhatsApp soketine bağlanmak için aşağıdaki QR kodunu telefonunuzla okutun.</p>
       </div>
 
       <!-- QR View -->
@@ -390,8 +427,9 @@
         <div class="qr-wrapper">
           <div class="qr-loading" id="qr-placeholder">
             <div class="spinner"></div>
-            <span style="font-size: 13px; font-weight: 500;">QR Kod Hazırlanıyor...</span>
+            <span id="qr-placeholder-text" style="font-size: 13px; font-weight: 500;">DockHosting QR Bekleniyor...</span>
           </div>
+          <canvas id="qr-canvas" class="qr-canvas" style="display: none;"></canvas>
           <img id="qr-img" class="qr-image" src="" alt="WhatsApp QR Kodu" style="display: none;" />
         </div>
       </div>
@@ -404,7 +442,7 @@
           </svg>
         </div>
         <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 6px; color: var(--text-main);">Bağlantı Başarılı!</h2>
-        <p style="font-size: 14px; color: var(--text-muted);">Yapay zeka asistanı gelen mesajları 7/24 otomatik olarak yanıtlıyor.</p>
+        <p style="font-size: 14px; color: var(--text-muted);">DockHosting backend üzerindeki Baileys soketi aktif ve 7/24 çalışıyor.</p>
 
         <div class="account-info">
           <div class="account-info-row">
@@ -432,7 +470,7 @@
       <!-- Status Indicator -->
       <div class="status-bar" id="status-bar">
         <div class="status-dot waiting_qr pulse" id="status-dot"></div>
-        <span id="status-text">Bağlantı durumu kontrol ediliyor...</span>
+        <span id="status-text">DockHosting backend durumu sorgulanıyor...</span>
       </div>
 
       <!-- Instructions Section -->
@@ -457,23 +495,39 @@
           </div>
         </div>
       </div>
+
+      <!-- Debug Section requested by User -->
+      <div class="debug-box">
+        <div class="debug-row">
+          <span class="debug-label">Backend:</span>
+          <span class="debug-value" id="debug-backend-val">https://whatsapp-chatbot.dockhosting.dev</span>
+        </div>
+        <div class="debug-row">
+          <span class="debug-label">API status:</span>
+          <span class="debug-status-badge waiting_qr" id="debug-status-val">Sorgulanıyor...</span>
+        </div>
+      </div>
     </div>
 
     <!-- Footer -->
     <div class="footer">
-      <span class="live-dot"></span> 7/24 Otomatik Eşitleme Aktif (Gemini 3.7 Flash)
+      <span>Yetkili Backend: DockHosting (7/24 Baileys Instance)</span>
     </div>
   </div>
 
   <script>
-    let currentStatus = null;
-    let pollInterval = null;
+    // Authoritative Production Backend URL
+    const PRODUCTION_BACKEND_URL = 'https://whatsapp-chatbot.dockhosting.dev';
+
+    let lastRenderedQrString = null;
     let isActionInProgress = false;
 
     const qrSection = document.getElementById('qr-section');
     const connectedSection = document.getElementById('connected-section');
     const instructionsSection = document.getElementById('instructions-section');
     const qrPlaceholder = document.getElementById('qr-placeholder');
+    const qrPlaceholderText = document.getElementById('qr-placeholder-text');
+    const qrCanvas = document.getElementById('qr-canvas');
     const qrImg = document.getElementById('qr-img');
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
@@ -484,78 +538,160 @@
     const accJid = document.getElementById('acc-jid');
     const accTime = document.getElementById('acc-time');
 
+    const debugBackendVal = document.getElementById('debug-backend-val');
+    const debugStatusVal = document.getElementById('debug-status-val');
+
+    debugBackendVal.textContent = PRODUCTION_BACKEND_URL;
+
+    /**
+     * Render raw QR string into square Canvas or Image
+     */
+    function renderQrCode(qrString) {
+      if (!qrString) return;
+
+      if (qrString === lastRenderedQrString) {
+        return; // already rendered
+      }
+      lastRenderedQrString = qrString;
+
+      // If it is already a base64 Data URL
+      if (qrString.startsWith('data:image')) {
+        qrImg.src = qrString;
+        qrImg.style.display = 'block';
+        qrCanvas.style.display = 'none';
+        qrPlaceholder.style.display = 'none';
+        return;
+      }
+
+      // If QRCode canvas library is loaded
+      if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
+        window.QRCode.toCanvas(qrCanvas, qrString, {
+          width: 250,
+          margin: 1,
+          color: {
+            dark: '#111827',
+            light: '#ffffff'
+          }
+        }, function (error) {
+          if (error) {
+            console.error('QR Canvas error:', error);
+            // Fallback to QR Server API if client render fails
+            qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(qrString);
+            qrImg.style.display = 'block';
+            qrCanvas.style.display = 'none';
+          } else {
+            qrCanvas.style.display = 'block';
+            qrImg.style.display = 'none';
+          }
+          qrPlaceholder.style.display = 'none';
+        });
+      } else {
+        // Fallback image rendering
+        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(qrString);
+        qrImg.style.display = 'block';
+        qrCanvas.style.display = 'none';
+        qrPlaceholder.style.display = 'none';
+      }
+    }
+
+    /**
+     * Fetch status directly from authoritative DockHosting backend
+     */
     async function fetchStatus() {
       if (isActionInProgress) return;
 
+      const targetUrl = `${PRODUCTION_BACKEND_URL}/api/whatsapp/status`;
+
       try {
-        const response = await fetch('/api/whatsapp/status', {
+        const response = await fetch(targetUrl, {
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
           }
         });
 
-        if (!response.ok) throw new Error('Sunucu yanıt vermedi');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
 
         const data = await response.json();
         updateUI(data);
       } catch (err) {
+        // Try fallback proxy if direct cross-origin request is blocked
+        try {
+          const fallbackRes = await fetch('/api/whatsapp/status');
+          if (fallbackRes.ok) {
+            const fallbackData = await fallbackRes.json();
+            updateUI(fallbackData);
+            return;
+          }
+        } catch (e) {}
+
+        console.warn('DockHosting backend fetch error:', err.message);
         statusDot.className = 'status-dot disconnected';
-        statusText.textContent = 'Sunucuya ulaşılamıyor...';
+        statusText.textContent = 'DockHosting backendine ulaşılamıyor...';
+        debugStatusVal.className = 'debug-status-badge disconnected';
+        debugStatusVal.textContent = 'Bağlantı Hatası';
       }
     }
 
+    /**
+     * Update UI strictly based on response from DockHosting backend
+     */
     function updateUI(data) {
       const status = data.status || 'disconnected';
+      const rawQr = data.qrRaw || data.qr || null;
 
-      const qrVal = data.qrRaw || data.qr;
+      // Debug Log requested
       console.log("[DEBUG] FRONTEND_QR_RECEIVED", {
-        length: qrVal?.length,
-        prefix: qrVal?.slice(0, 12),
+        length: rawQr?.length,
+        prefix: rawQr?.slice(0, 12),
         updatedAt: data.updatedAt
       });
 
+      // Update Debug Box status
+      debugStatusVal.className = `debug-status-badge ${status}`;
+      debugStatusVal.textContent = status;
+
+      // RULE 8: Only show connected screen if DockHosting backend explicitly returns status: "connected"
       if (status === 'connected') {
-        // Connected State
         qrSection.style.display = 'none';
         instructionsSection.style.display = 'none';
         connectedSection.style.display = 'block';
 
         viewTitle.textContent = 'WhatsApp Asistanı Aktif';
-        viewSubtitle.textContent = 'Bot başarıyla bağlandı ve gelen müşteri taleplerini yanıtlıyor.';
+        viewSubtitle.textContent = 'DockHosting üzerindeki Baileys soketi başarıyla bağlandı.';
 
         statusDot.className = 'status-dot connected';
-        statusText.textContent = 'WhatsApp başarıyla bağlandı';
+        statusText.textContent = 'WhatsApp başarıyla bağlandı (DockHosting)';
 
         accName.textContent = data.userName || 'WhatsApp Hesabı';
-        accJid.textContent = data.userJid || 'Bağlı';
+        accJid.textContent = data.userJid || data.jid || 'Bağlı';
         accTime.textContent = data.connectedAt 
           ? new Date(data.connectedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
           : 'Aktif';
 
       } else if (status === 'waiting_qr') {
-        // Waiting QR Scan State
         qrSection.style.display = 'block';
         instructionsSection.style.display = 'block';
         connectedSection.style.display = 'none';
 
         viewTitle.textContent = 'WhatsApp Hesabınızı Bağlayın';
-        viewSubtitle.textContent = 'Telefonunuzdaki WhatsApp uygulaması ile QR kodunu taratarak yapay zeka asistanını aktif edin.';
+        viewSubtitle.textContent = 'DockHosting backend tarafından üretilen QR kodunu telefonunuzla okutun.';
 
         statusDot.className = 'status-dot waiting_qr pulse';
         statusText.textContent = 'QR kodunu telefonunuzla tarayın';
 
-        if (data.qr) {
-          qrImg.src = data.qr;
-          qrImg.style.display = 'block';
-          qrPlaceholder.style.display = 'none';
+        if (rawQr) {
+          renderQrCode(rawQr);
         } else {
+          qrCanvas.style.display = 'none';
           qrImg.style.display = 'none';
           qrPlaceholder.style.display = 'flex';
+          qrPlaceholderText.textContent = 'Yeni QR Üretiliyor...';
         }
 
       } else if (status === 'connecting') {
-        // Connecting State
         qrSection.style.display = 'block';
         instructionsSection.style.display = 'block';
         connectedSection.style.display = 'none';
@@ -563,9 +699,10 @@
         statusDot.className = 'status-dot connecting pulse';
         statusText.textContent = 'WhatsApp\'a bağlanılıyor...';
 
+        qrCanvas.style.display = 'none';
         qrImg.style.display = 'none';
         qrPlaceholder.style.display = 'flex';
-        qrPlaceholder.querySelector('span').textContent = 'Oturum doğrulanıyor...';
+        qrPlaceholderText.textContent = 'Oturum doğrulanıyor...';
 
       } else {
         // Disconnected State
@@ -574,18 +711,20 @@
         connectedSection.style.display = 'none';
 
         statusDot.className = 'status-dot disconnected';
-        statusText.textContent = 'Bağlantı kesildi. Yeniden başlatılıyor...';
+        statusText.textContent = 'Bağlantı bekleniyor...';
 
+        qrCanvas.style.display = 'none';
         qrImg.style.display = 'none';
         qrPlaceholder.style.display = 'flex';
-        qrPlaceholder.querySelector('span').textContent = 'Yeni QR bekleniyor...';
+        qrPlaceholderText.textContent = 'DockHosting QR bekleniyor...';
       }
-
-      currentStatus = status;
     }
 
+    /**
+     * Send logout request strictly to DockHosting backend
+     */
     async function handleLogout() {
-      if (!confirm('WhatsApp oturumunu kapatıp yeni QR kodu üretmek istiyor musunuz?')) {
+      if (!confirm('DockHosting üzerindeki WhatsApp oturumunu kapatıp yeni QR kodu üretmek istiyor musunuz?')) {
         return;
       }
 
@@ -595,23 +734,32 @@
       isActionInProgress = true;
 
       try {
-        const res = await fetch('/api/whatsapp/logout', {
+        // Try direct call to DockHosting first
+        await fetch(`${PRODUCTION_BACKEND_URL}/api/whatsapp/logout`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: 'default' })
+        }).catch(async () => {
+          // Fallback via local proxy
+          return fetch('/api/whatsapp/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: 'default' })
+          });
         });
-        await res.json();
       } catch (err) {
-        console.error('Logout error:', err);
+        console.error('Logout request error:', err);
       } finally {
         isActionInProgress = false;
         btn.disabled = false;
-        setTimeout(fetchStatus, 1000);
+        lastRenderedQrString = null;
+        setTimeout(fetchStatus, 800);
       }
     }
 
-    // Start polling every 2 seconds
+    // Initial fetch & 2-second interval polling
     fetchStatus();
-    pollInterval = setInterval(fetchStatus, 2000);
+    setInterval(fetchStatus, 2000);
   </script>
 </body>
 </html>
