@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Bağlantısı | QR</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 700px;
+      width: 100%;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #ffffff;
+    }
+    p.subtitle {
+      font-size: 16px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+    .qr-container {
+      background-color: #ffffff;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 600px;
+      height: 600px;
+      max-width: 90vw;
+      max-height: 90vw;
+      position: relative;
+    }
+    #qr {
+      width: 100%;
+      height: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: contain;
+      display: block;
+      background: #ffffff;
+    }
+    .placeholder {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #1e293b;
+      border-radius: 12px;
+      color: #94a3b8;
+      font-size: 18px;
+      font-weight: 500;
+      padding: 20px;
+    }
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top-color: #22c55e;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .connected-banner {
+      display: none;
+      background-color: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+      color: #4ade80;
+      padding: 16px 24px;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 20px;
+    }
+    .instructions {
+      margin-top: 24px;
+      font-size: 14px;
+      color: #64748b;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WhatsApp Hesabınızı Bağlayın</h1>
+    <p class="subtitle">WhatsApp &gt; Bağlı Cihazlar &gt; Cihaz Bağla adımlarını izleyip QR kodu tarayın.</p>
+
+    <div class="qr-container">
+      <img id="qr" src="/api/whatsapp/qr.png" alt="WhatsApp QR Kodu" />
+      <div id="placeholder" class="placeholder">
+        <div class="spinner"></div>
+        <span id="placeholder-text">Yeni WhatsApp QR kodu bekleniyor...</span>
+      </div>
+    </div>
+
+    <div id="connected-banner" class="connected-banner">
+      ✅ WhatsApp Başarıyla Bağlandı!
+    </div>
+
+    <div class="instructions">
+      Otomatik yenileme aktif. QR güncellendiğinde ekrandaki görsel 2 saniyede bir kontrol edilir.
+    </div>
+  </div>
+
+  <script>
+    const qrImg = document.getElementById('qr');
+    const placeholder = document.getElementById('placeholder');
+    const placeholderText = document.getElementById('placeholder-text');
+    const connectedBanner = document.getElementById('connected-banner');
+
+    qrImg.onerror = function() {
+      qrImg.style.display = 'none';
+      placeholder.style.display = 'flex';
+      placeholderText.textContent = 'Yeni WhatsApp QR kodu bekleniyor...';
+    };
+
+    qrImg.onload = function() {
+      qrImg.style.display = 'block';
+      placeholder.style.display = 'none';
+    };
+
+    // Auto-refresh timestamp every 2 seconds to avoid caching and display new QR
+    setInterval(() => {
+      qrImg.src = '/api/whatsapp/qr.png?t=' + Date.now();
+    }, 2000);
+
+    // Status checker for connected state
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/whatsapp/status', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === 'connected') {
+            qrImg.style.display = 'none';
+            placeholder.style.display = 'none';
+            connectedBanner.style.display = 'block';
+          }
+        }
+      } catch (e) {}
+    }
+
+    setInterval(checkStatus, 3000);
+    checkStatus();
+  </script>
+</body>
+</html>

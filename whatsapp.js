@@ -1,6 +1,6 @@
 /**
  * WhatsApp Connection Manager using @whiskeysockets/baileys
- * Ultra-lightweight 24/7 backend with Pairing-Code Architecture
+ * Ultra-lightweight 24/7 backend - Pure Backend PNG QR Pipeline
  */
 
 const {
@@ -15,20 +15,17 @@ const fs = require('fs');
 const path = require('path');
 const { generateReply } = require('./assistant');
 
-// Base Auth Directory (Default: ./auth, Wispbyte: /home/container/auth or custom)
+// Base Auth Directory
 const BASE_AUTH_DIR = process.env.AUTH_DIR
   ? path.resolve(process.env.AUTH_DIR)
   : path.resolve(__dirname, 'auth');
 
-// Default target pairing number
-const DEFAULT_PAIRING_NUMBER = '905102237729';
+// Authoritative Memory State
+let currentQr = null;
+let qrUpdatedAt = null;
 
-/**
- * Authoritative in-memory state returned instantly by /api/whatsapp/status
- */
 const whatsappState = {
-  status: "starting", // "starting" | "connecting" | "waiting_pairing_code" | "connected" | "disconnected"
-  pairingCode: null,
+  status: "starting", // "starting" | "connecting" | "waiting_qr" | "connected" | "disconnected"
   jid: null,
   userName: null,
   connectedAt: null,
@@ -54,8 +51,6 @@ function getOrCreateSession(sessionId = 'default') {
       authDir: sessionAuthDir,
       socket: null,
       status: 'starting',
-      pairingCode: null,
-      pairingCodeRequested: false,
       reconnectAttempts: 0,
       isReconnecting: false,
       isInitializing: false,
@@ -114,7 +109,7 @@ function cleanupSocket(session) {
 }
 
 /**
- * Starts WhatsApp socket connection using pairing code (Single instance)
+ * Starts WhatsApp socket connection (Single instance)
  */
 async function startWhatsApp(sessionId = 'default', isReconnect = false) {
   const session = getOrCreateSession(sessionId);
@@ -161,7 +156,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
       logEvent('info', `Baileys v${version.join('.')} başlatılıyor (Registered: ${isRegistered}, isLatest: ${isLatest})`, null, sessionId);
     }
 
-    // 3. Create SINGLE WhatsApp Socket (Default browser, no terminal QR)
+    // 3. Create SINGLE WhatsApp Socket
     const sock = makeWASocket({
       version,
       logger: pino({ level: 'silent' }),
@@ -183,7 +178,6 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
 
     session.socket = sock;
     session.isInitializing = false;
-    session.pairingCodeRequested = false;
 
     // 4. Credential persistence handler
     sock.ev.on('creds.update', saveCreds);
@@ -197,56 +191,35 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
         hasQr: !!qr
       });
 
-      // Pairing Code Request: Triggered on initial qr event when not registered
-      if (
-        qr &&
-        !sock.authState?.creds?.registered &&
-        !session.pairingCodeRequested
-      ) {
-        session.pairingCodeRequested = true;
+      if (qr) {
+        currentQr = qr;
+        qrUpdatedAt = Date.now();
 
-        try {
-          const rawPhone = process.env.PAIRING_NUMBER || DEFAULT_PAIRING_NUMBER;
-          const phoneNumber = rawPhone.replace(/\D/g, '');
+        whatsappState.status = 'waiting_qr';
+        whatsappState.updatedAt = qrUpdatedAt;
 
-          const code = await sock.requestPairingCode(phoneNumber);
-          const formattedCode = code.match(/.{1,4}/g)?.join('-') || code;
-
-          session.pairingCode = formattedCode;
-          whatsappState.status = 'waiting_pairing_code';
-          whatsappState.pairingCode = formattedCode;
-          whatsappState.updatedAt = Date.now();
-
-          console.log('');
-          console.log('==========================================');
-          console.log('📱 WHATSAPP BAĞLANTI KODU');
-          console.log('==========================================');
-          console.log(formattedCode);
-          console.log('==========================================');
-          console.log('WhatsApp > Bağlı Cihazlar > Cihaz Bağla > Telefon numarasıyla bağla');
-          console.log('==========================================');
-          console.log('');
-
-        } catch (err) {
-          session.pairingCodeRequested = false;
-          console.error('[PAIRING CODE ERROR]', err.message || err);
-        }
+        console.log('');
+        console.log('==========================================');
+        console.log('📱 WHATSAPP BAĞLANTISI BEKLENİYOR');
+        console.log('QR:');
+        console.log('https://whatsapp-chatbot.dockhosting.dev/qr');
+        console.log('==========================================');
+        console.log('');
       }
 
-      // Connection open
       if (connection === 'open') {
+        currentQr = null;
         const user = sock.user;
 
         console.log('');
         console.log('==========================================');
         console.log('✅ WHATSAPP BAŞARIYLA BAĞLANDI');
-        console.log('JID:', user?.id);
+        console.log('JID:', user?.id || 'unknown');
         console.log('==========================================');
         console.log('');
 
         whatsappState.status = 'connected';
-        whatsappState.pairingCode = null;
-        whatsappState.jid = user?.id || null;
+        whatsappState.jid = user?.id || 'unknown';
         whatsappState.userName = user?.name || 'WhatsApp Hesabı';
         whatsappState.connectedAt = Date.now();
         whatsappState.updatedAt = Date.now();
@@ -255,6 +228,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
         session.reconnectAttempts = 0;
         session.isReconnecting = false;
       } else if (connection === 'close') {
+        currentQr = null;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const reason = lastDisconnect?.error?.message || 'Bağlantı kapandı';
         const isLoggedOut = statusCode === DisconnectReason.loggedOut;
@@ -269,7 +243,6 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           logEvent('info', 'Oturum kapatıldı (Logged out). Auth klasörü yenileniyor.', null, sessionId);
           whatsappState.jid = null;
           whatsappState.userName = null;
-          whatsappState.pairingCode = null;
 
           try {
             if (fs.existsSync(session.authDir)) {
@@ -388,16 +361,16 @@ async function logoutWhatsApp(sessionId = 'default') {
     cleanupSocket(session);
   }
 
+  currentQr = null;
+  qrUpdatedAt = null;
+
   whatsappState.status = 'disconnected';
-  whatsappState.pairingCode = null;
   whatsappState.jid = null;
   whatsappState.userName = null;
   whatsappState.connectedAt = null;
   whatsappState.updatedAt = Date.now();
 
   session.status = 'disconnected';
-  session.pairingCode = null;
-  session.pairingCodeRequested = false;
   session.isInitializing = false;
   session.isReconnecting = false;
 
@@ -414,7 +387,7 @@ async function logoutWhatsApp(sessionId = 'default') {
     startWhatsApp(sessionId, true);
   }, 1000);
 
-  return { success: true, message: 'Oturum kapatıldı, yeni bağlantı kodu bekleniyor.' };
+  return { success: true, message: 'Oturum kapatıldı, yeni QR bekleniyor.' };
 }
 
 /**
@@ -427,6 +400,7 @@ async function disconnectWhatsApp(sessionId = 'default') {
     session.reconnectTimer = null;
   }
   cleanupSocket(session);
+  currentQr = null;
   whatsappState.status = 'disconnected';
   whatsappState.updatedAt = Date.now();
   session.status = 'disconnected';
@@ -437,6 +411,8 @@ module.exports = {
   startWhatsApp,
   logoutWhatsApp,
   disconnectWhatsApp,
+  getCurrentQr: () => currentQr,
+  getQrUpdatedAt: () => qrUpdatedAt,
   whatsappState,
   AUTH_DIR: BASE_AUTH_DIR
 };

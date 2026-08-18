@@ -1,6 +1,6 @@
 /**
  * WhatsApp Gemini Bot - Ultra-Lightweight Production Server
- * Instant Authoritative Memory State & Pairing-Code Architecture
+ * Pure Backend PNG QR & Web QR Page Pipeline
  */
 
 require('dotenv').config();
@@ -8,10 +8,13 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const QRCode = require('qrcode');
 const {
   startWhatsApp,
   disconnectWhatsApp,
   logoutWhatsApp,
+  getCurrentQr,
+  getQrUpdatedAt,
   whatsappState,
   AUTH_DIR
 } = require('./whatsapp');
@@ -23,9 +26,8 @@ const HOSTNAME = '0.0.0.0';
 
 async function bootstrap() {
   console.log('======================================================');
-  console.log('🚀 WhatsApp Gemini Bot - Production Server & Pairing Code');
+  console.log('🚀 WhatsApp Gemini Bot - Production Server');
   console.log(`📁 Auth Klasörü: ${AUTH_DIR}`);
-  console.log(`📱 Pairing Numarası: ${process.env.PAIRING_NUMBER || '905102237729'}`);
   console.log(`🌐 Port: ${PORT}`);
   console.log('======================================================');
 
@@ -45,12 +47,12 @@ async function bootstrap() {
   });
 
   // 1. Authoritative Realtime Status API: GET /api/whatsapp/status
-  // Synchronous non-blocking response
   app.get('/api/whatsapp/status', (req, res) => {
+    const currentQr = getCurrentQr();
     res.set('Cache-Control', 'no-store');
     return res.status(200).json({
       status: whatsappState.status,
-      pairingCode: whatsappState.pairingCode,
+      hasQr: !!currentQr,
       jid: whatsappState.jid,
       userName: whatsappState.userName,
       connectedAt: whatsappState.connectedAt,
@@ -58,7 +60,44 @@ async function bootstrap() {
     });
   });
 
-  // 2. WhatsApp Logout API: POST /api/whatsapp/logout
+  // 2. Authoritative PNG QR Generator: GET /api/whatsapp/qr.png
+  app.get('/api/whatsapp/qr.png', async (req, res) => {
+    const currentQr = getCurrentQr();
+
+    if (!currentQr) {
+      return res.status(404).send('Aktif QR bekleniyor.');
+    }
+
+    try {
+      const png = await QRCode.toBuffer(currentQr, {
+        type: 'png',
+        width: 700,
+        margin: 5,
+        errorCorrectionLevel: 'M'
+      });
+
+      res.set({
+        'Content-Type': 'image/png',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
+
+      return res.send(png);
+
+    } catch (err) {
+      console.error('[QR PNG ERROR]', err);
+      return res.status(500).send('QR oluşturulamadı.');
+    }
+  });
+
+  // 3. Web QR Page: GET /qr & GET /connect
+  app.get(['/qr', '/connect'], (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, 'qr.html'));
+  });
+
+  // 4. WhatsApp Logout API: POST /api/whatsapp/logout
   app.post('/api/whatsapp/logout', async (req, res) => {
     const sessionId = req.body?.sessionId || 'default';
     try {
@@ -69,26 +108,22 @@ async function bootstrap() {
     }
   });
 
-  // Temporary Debug Auth Reset API: POST /api/debug/reset-auth
+  // 5. Temporary Debug Auth Reset API: POST /api/debug/reset-auth
   app.post('/api/debug/reset-auth', async (req, res) => {
     try {
-      // 1. WhatsApp socket varsa kapat
       await disconnectWhatsApp('default');
 
-      // 2. AUTH_DIR içindeki tüm auth dosyalarını sil
       fs.rmSync(AUTH_DIR, {
         recursive: true,
         force: true
       });
 
-      // 3. AUTH_DIR klasörünü yeniden oluştur
       fs.mkdirSync(AUTH_DIR, {
         recursive: true
       });
 
       console.log('[DEBUG] Auth sıfırlandı:', AUTH_DIR);
 
-      // 4. JSON dön
       return res.status(200).json({
         success: true,
         authDir: AUTH_DIR
@@ -103,44 +138,40 @@ async function bootstrap() {
     }
   });
 
-  // 3. Web Onboarding UI route: GET /connect
-  app.get('/connect', (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.sendFile(path.join(__dirname, 'connect.html'));
-  });
-
-  // 4. Root endpoint: Serves onboarding UI for browsers or JSON for API calls
+  // 6. Root endpoint
   app.get('/', (req, res) => {
     const acceptsHtml = req.accepts(['html', 'json']) === 'html';
     if (acceptsHtml) {
       res.set('Cache-Control', 'no-store');
-      return res.sendFile(path.join(__dirname, 'connect.html'));
+      return res.sendFile(path.join(__dirname, 'qr.html'));
     }
 
     res.status(200).json({
       status: 'ok',
       service: 'WhatsApp Gemini Bot',
-      connectUrl: '/connect'
+      qrUrl: '/qr',
+      qrPngUrl: '/api/whatsapp/qr.png'
     });
   });
 
-  // 5. Health check endpoint (for DockHosting / Uptime monitors): GET /health
+  // 7. Health check endpoint: GET /health
   app.get('/health', (req, res) => {
     res.status(200).json({
       status: 'healthy',
       whatsapp: whatsappState.status === 'connected' ? 'connected' : whatsappState.status,
+      hasQr: !!getCurrentQr(),
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     });
   });
 
-  // 6. Full System Overview: GET /status
+  // 8. Full System Overview: GET /status
   app.get('/status', (req, res) => {
     const memory = getMemoryStats();
     res.status(200).json({
       status: 'ok',
       whatsapp: whatsappState.status,
-      pairingCode: whatsappState.pairingCode,
+      hasQr: !!getCurrentQr(),
       user: whatsappState.userName || whatsappState.jid,
       memory,
       business: business.businessName,
@@ -150,7 +181,7 @@ async function bootstrap() {
     });
   });
 
-  // 7. Start HTTP Listener & SINGLE Baileys Background Socket
+  // 9. Start HTTP Listener & SINGLE Baileys Background Socket
   const httpServer = app.listen(PORT, HOSTNAME, async (err) => {
     if (err) {
       console.error('❌ HTTP sunucu başlatılamadı:', err.message);
@@ -158,9 +189,9 @@ async function bootstrap() {
     }
 
     console.log(`[HTTP] Sunucu aktif: http://localhost:${PORT}`);
-    console.log(`[HTTP] Web Bağlantı Arayüzü: http://localhost:${PORT}/connect`);
+    console.log(`[HTTP] QR Sayfası: http://localhost:${PORT}/qr`);
+    console.log(`[HTTP] Doğrudan PNG QR: http://localhost:${PORT}/api/whatsapp/qr.png`);
     console.log(`[HTTP] Health Check: http://localhost:${PORT}/health`);
-    console.log(`[HTTP] Status API: http://localhost:${PORT}/api/whatsapp/status`);
 
     // Start single Baileys instance in background
     try {
