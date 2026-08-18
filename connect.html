@@ -440,7 +440,7 @@
           <canvas id="qr-canvas" class="qr-canvas" style="display: none;"></canvas>
           <img id="qr-img" class="qr-image" src="" alt="WhatsApp QR Kodu" style="display: none;" />
         </div>
-        <!-- QR ID Fingerprint Badge (Requirement 4) -->
+        <!-- Live QR ID Badge -->
         <div class="qr-id-badge" id="qr-id-display">DockHosting QR ID: -</div>
       </div>
 
@@ -526,11 +526,11 @@
   </div>
 
   <script>
-    // Determine status API endpoint: uses current origin (e.g. on Dockhosting or preview)
     const STATUS_API_ENDPOINT = '/api/whatsapp/status';
     const LOGOUT_API_ENDPOINT = '/api/whatsapp/logout';
 
-    let lastRenderedQrString = null;
+    let displayedQrId = null;
+    let currentStatus = 'starting';
     let isActionInProgress = false;
 
     const qrSection = document.getElementById('qr-section');
@@ -561,12 +561,6 @@
     function renderQrCode(qrString) {
       if (!qrString) return;
 
-      if (qrString === lastRenderedQrString) {
-        return; // already rendered
-      }
-      lastRenderedQrString = qrString;
-
-      // If it is a base64 Data URL
       if (qrString.startsWith('data:image')) {
         qrImg.src = qrString;
         qrImg.style.display = 'block';
@@ -575,7 +569,6 @@
         return;
       }
 
-      // Render raw QR string using QRCode.toCanvas
       if (window.QRCode && typeof window.QRCode.toCanvas === 'function') {
         window.QRCode.toCanvas(qrCanvas, qrString, {
           width: 238,
@@ -610,26 +603,43 @@
     async function fetchStatus() {
       if (isActionInProgress) return;
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
       try {
         const response = await fetch(STATUS_API_ENDPOINT, {
+          signal: controller.signal,
+          cache: 'no-store',
           headers: {
-            'Cache-Control': 'no-cache',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache'
           }
         });
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
         const data = await response.json();
+
+        // Browser console log on every poll (Requirement 10)
+        console.log("[POLL]", {
+          status: data.status,
+          qrId: data.qrId,
+          time: Date.now()
+        });
+
         updateUI(data);
       } catch (err) {
-        console.warn('Status fetch error:', err.message);
-        statusDot.className = 'status-dot disconnected';
-        statusText.textContent = 'Backend sunucusuna ulaşılamıyor...';
-        debugStatusVal.className = 'debug-status-badge disconnected';
-        debugStatusVal.textContent = 'Bağlantı Hatası';
+        clearTimeout(timeoutId);
+        console.error("[POLL ERROR]", err.message || err);
+        if (currentStatus !== 'connected') {
+          statusDot.className = 'status-dot disconnected';
+          statusText.textContent = 'Backend sunucusuna ulaşılamıyor...';
+          debugStatusVal.className = 'debug-status-badge disconnected';
+          debugStatusVal.textContent = 'Bağlantı Hatası';
+        }
       }
     }
 
@@ -640,8 +650,9 @@
       const status = data.status || 'disconnected';
       const qrString = data.qr || null;
       const qrId = data.qrId || null;
+      currentStatus = status;
 
-      // Update Debug QR ID Badge (Requirement 4)
+      // Update Live QR ID Badge (Requirement 4 & 11)
       if (qrId) {
         qrIdDisplay.textContent = `DockHosting QR ID: ${qrId}`;
         qrIdDisplay.style.display = 'block';
@@ -657,6 +668,7 @@
       debugStatusVal.textContent = status;
 
       if (status === 'connected') {
+        displayedQrId = null;
         qrSection.style.display = 'none';
         instructionsSection.style.display = 'none';
         connectedSection.style.display = 'block';
@@ -684,9 +696,12 @@
         statusDot.className = 'status-dot waiting_qr pulse';
         statusText.textContent = 'QR kodunu telefonunuzla tarayın';
 
-        if (qrString) {
+        // Requirement 5 & 6: Re-render immediately if qrId changed or new QR arrived
+        if (qrString && (qrId !== displayedQrId || !displayedQrId)) {
+          displayedQrId = qrId;
           renderQrCode(qrString);
-        } else {
+        } else if (!qrString) {
+          displayedQrId = null;
           qrCanvas.style.display = 'none';
           qrImg.style.display = 'none';
           qrPlaceholder.style.display = 'flex';
@@ -694,6 +709,7 @@
         }
 
       } else if (status === 'connecting') {
+        displayedQrId = null;
         qrSection.style.display = 'block';
         instructionsSection.style.display = 'block';
         connectedSection.style.display = 'none';
@@ -708,6 +724,7 @@
 
       } else {
         // Disconnected State
+        displayedQrId = null;
         qrSection.style.display = 'block';
         instructionsSection.style.display = 'block';
         connectedSection.style.display = 'none';
@@ -746,14 +763,28 @@
       } finally {
         isActionInProgress = false;
         btn.disabled = false;
-        lastRenderedQrString = null;
-        setTimeout(fetchStatus, 800);
+        displayedQrId = null;
+        setTimeout(fetchStatus, 500);
       }
     }
 
-    // Initial fetch & 2-second interval polling
-    fetchStatus();
-    setInterval(fetchStatus, 2000);
+    /**
+     * Resilient recursive polling loop (Never dies, recovers automatically)
+     */
+    async function pollStatus() {
+      try {
+        await fetchStatus();
+      } catch (err) {
+        console.error("[POLL UNCAUGHT ERROR]", err);
+      } finally {
+        // Poll every 1000ms during QR waiting / connecting, 3000ms when connected
+        const delay = (currentStatus === 'connected') ? 3000 : 1000;
+        setTimeout(pollStatus, delay);
+      }
+    }
+
+    // Start single continuous polling loop
+    pollStatus();
   </script>
 </body>
 </html>
