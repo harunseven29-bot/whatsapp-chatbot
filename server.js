@@ -5,6 +5,7 @@
 
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const QRCode = require('qrcode');
 const {
   startAllEnabledClients,
@@ -15,8 +16,9 @@ const {
 const clientManager = require('./client-manager');
 const { getMemoryStats } = require('./assistant');
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const HOSTNAME = '0.0.0.0';
+const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
 
 async function bootstrap() {
   const app = express();
@@ -165,17 +167,23 @@ async function bootstrap() {
   app.get('/', (req, res) => {
     const acceptsHtml = req.accepts(['html', 'json']) === 'html';
     if (acceptsHtml) {
-      res.set('Cache-Control', 'no-store');
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      const connectHtmlPath = path.join(__dirname, 'public', 'connect.html');
+      if (fs.existsSync(connectHtmlPath)) {
+        return res.sendFile(connectHtmlPath);
+      }
       return res.redirect('/connect/client-001');
     }
 
     const enabledClients = clientManager.getEnabledClients();
-    res.status(200).json({
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return res.status(200).json({
       status: 'ok',
       service: 'Multi-Client WhatsApp Gemini Bot (Max 5 Clients)',
+      publicBaseUrl: PUBLIC_BASE_URL,
       activeClients: enabledClients.length,
       maxClients: clientManager.MAX_CLIENTS,
-      connectUrls: enabledClients.map(c => `/connect/${c.id}`)
+      connectUrls: enabledClients.map(c => `${PUBLIC_BASE_URL}/connect/${c.id}`)
     });
   });
 
@@ -227,9 +235,10 @@ async function bootstrap() {
       process.exit(1);
     }
 
-    console.log(`[HTTP] Sunucu aktif: http://localhost:${PORT}`);
-    console.log(`[HTTP] Health Check: http://localhost:${PORT}/health`);
-    console.log(`[HTTP] Client-001 Connect URL: http://localhost:${PORT}/connect/client-001`);
+    console.log(`[HTTP] Sunucu aktif: http://${HOSTNAME}:${PORT}`);
+    console.log(`[HTTP] Public Base URL: ${PUBLIC_BASE_URL}`);
+    console.log(`[HTTP] Health Check: ${PUBLIC_BASE_URL}/health`);
+    console.log(`[HTTP] Client-001 Connect URL: ${PUBLIC_BASE_URL}/connect/client-001`);
 
     // Start all enabled clients in background
     try {

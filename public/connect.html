@@ -99,19 +99,19 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      color: #64748b;
       gap: 12px;
-      text-align: center;
-      font-size: 14px;
-      font-weight: 500;
+      color: #475569;
+      font-size: 13px;
+      width: 100%;
+      height: 100%;
     }
     .spinner {
-      width: 36px;
-      height: 36px;
+      width: 32px;
+      height: 32px;
       border: 3px solid #e2e8f0;
-      border-top-color: #2563eb;
+      border-top-color: #25d366;
       border-radius: 50%;
-      animation: spin 0.9s linear infinite;
+      animation: spin 0.8s linear infinite;
     }
     @keyframes spin {
       to { transform: rotate(360deg); }
@@ -119,26 +119,37 @@
     .instructions {
       text-align: left;
       background: #0f172a;
+      border: 1px solid #334155;
       border-radius: 10px;
-      padding: 14px 16px;
+      padding: 16px;
+      margin-bottom: 16px;
       font-size: 13px;
-      color: #cbd5e1;
       line-height: 1.6;
-      margin-top: 16px;
+      color: #cbd5e1;
     }
     .instructions ol {
-      padding-left: 18px;
+      padding-left: 20px;
+    }
+    .instructions li {
+      margin-bottom: 4px;
+    }
+    .instructions strong {
+      color: #f8fafc;
+    }
+    .footer-note {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 16px;
     }
     .success-box {
-      background: #064e3b;
+      background: rgba(5, 150, 105, 0.1);
       border: 1px solid #059669;
       border-radius: 12px;
       padding: 24px 16px;
-      color: #ecfdf5;
       margin-bottom: 16px;
     }
     .success-icon {
-      font-size: 40px;
+      font-size: 48px;
       margin-bottom: 12px;
     }
     .connected-phone {
@@ -147,50 +158,44 @@
       font-size: 16px;
       margin-top: 6px;
     }
-    .footer-note {
-      font-size: 12px;
-      color: #64748b;
-      margin-top: 20px;
-    }
   </style>
 </head>
 <body>
-
   <div class="card">
-    <div id="statusBadge" class="badge">
-      <span class="dot">●</span>
-      <span id="badgeText">Bağlantı Kontrol Ediliyor...</span>
+    <div id="statusBadge" class="badge connecting">
+      <span id="badgeText">Bağlantı Hazırlanıyor...</span>
     </div>
 
-    <h1 id="businessTitle" class="title">WhatsApp Bağlantısı</h1>
-    <p id="businessSubtitle" class="subtitle">İşletme Asistanı Entegrasyonu</p>
+    <h1 class="title" id="businessTitle">WhatsApp Asistanı</h1>
+    <p class="subtitle">Otomatik Yanıt & Randevu Sistemi</p>
 
-    <!-- QR Container -->
+    <!-- QR Section (Visible when waiting for QR scan) -->
     <div id="qrSection">
       <div class="qr-frame">
         <img id="qrImage" class="qr-img" style="display: none;" alt="WhatsApp QR Kodu">
         <div id="qrLoading" class="qr-placeholder">
           <div class="spinner"></div>
-          <span>Yeni WhatsApp QR kodu bekleniyor...</span>
+          <span>QR Kod Üretiliyor...</span>
         </div>
       </div>
 
       <div class="instructions">
         <ol>
           <li>Telefonunuzdan <strong>WhatsApp</strong>'ı açın.</li>
-          <li><strong>Bağlı Cihazlar</strong> &gt; <strong>Cihaz Bağla</strong> seçeneğine dokunun.</li>
-          <li>Kameranızı yukarıdaki QR koda doğrultun.</li>
+          <li><strong>Ayarlar</strong> &gt; <strong>Bağlı Cihazlar</strong>'a gidin.</li>
+          <li><strong>Cihaz Bağla</strong> butonuna dokunun.</li>
+          <li>Yukarıdaki QR kodu telefonunuzla tarayın.</li>
         </ol>
       </div>
     </div>
 
-    <!-- Connected State Container -->
+    <!-- Connected Section (Visible when session is active) -->
     <div id="connectedSection" style="display: none;">
       <div class="success-box">
         <div class="success-icon">✅</div>
-        <h3>WhatsApp Başarıyla Bağlandı!</h3>
+        <h3 style="color: #34d399; font-size: 16px; font-weight: 600;">Cihaz Başarıyla Bağlandı</h3>
         <p class="connected-phone" id="connectedPhone"></p>
-        <p style="font-size: 13px; margin-top: 10px; color: #a7f3d0;">
+        <p style="font-size: 13px; color: #94a3b8; margin-top: 8px;">
           Yapay zeka asistanınız aktif olarak gelen mesajları yanıtlamaktadır. Bu sayfayı kapatabilirsiniz.
         </p>
       </div>
@@ -200,13 +205,31 @@
   </div>
 
   <script>
-    // Extract clientId from URL: /connect/:clientId
-    const pathParts = window.location.pathname.split('/').filter(Boolean);
-    const clientId = pathParts[pathParts.length - 1] === 'connect' || pathParts[pathParts.length - 1] === 'qr'
-      ? 'client-001'
-      : pathParts[pathParts.length - 1];
+    // Extract clientId from query param (?client=... / ?clientId=...) or URL pathname, fallback to 'client-001'
+    function resolveClientId() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryClient = urlParams.get('client') || urlParams.get('clientId');
+        if (queryClient && queryClient.trim()) {
+          return queryClient.trim();
+        }
 
-    document.getElementById('clientIdNote').textContent = 'Client ID: ' + clientId;
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        if (pathParts.length > 0) {
+          const last = pathParts[pathParts.length - 1];
+          if (last && last !== 'connect' && last !== 'qr' && !last.endsWith('.html')) {
+            return last;
+          }
+        }
+      } catch (e) {}
+      return 'client-001';
+    }
+
+    const clientId = resolveClientId();
+    const clientIdNote = document.getElementById('clientIdNote');
+    if (clientIdNote) {
+      clientIdNote.textContent = 'Client ID: ' + clientId;
+    }
 
     const qrImage = document.getElementById('qrImage');
     const qrLoading = document.getElementById('qrLoading');
@@ -221,7 +244,12 @@
 
     async function fetchStatus() {
       try {
-        const res = await fetch('/api/clients/' + clientId + '/status', {
+        const res = await fetch('/api/clients/' + encodeURIComponent(clientId) + '/status', {
+          headers: {
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          },
           cache: 'no-store'
         });
 
@@ -236,32 +264,38 @@
           throw new Error('HTTP ' + res.status);
         }
 
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          console.warn('[STATUS] Beklenmeyen yanıt formatı:', contentType);
+          return;
+        }
+
         const data = await res.json();
 
-        if (data.businessName) {
+        if (data && data.businessName) {
           businessTitle.textContent = data.businessName;
         }
 
-        if (data.status === 'connected') {
+        if (data && data.status === 'connected') {
           statusBadge.className = 'badge connected';
           badgeText.textContent = 'Bağlı & Aktif';
           qrSection.style.display = 'none';
           connectedSection.style.display = 'block';
           connectedPhone.textContent = data.jid || data.userName || 'WhatsApp Hesabı';
-        } else if (data.status === 'waiting_qr' || data.hasQr) {
+        } else if (data && (data.status === 'waiting_qr' || data.hasQr)) {
           statusBadge.className = 'badge waiting_qr';
           badgeText.textContent = '📱 QR Okutulması Bekleniyor';
           qrSection.style.display = 'block';
           connectedSection.style.display = 'none';
 
           // Update QR Image with cache buster
-          const qrUrl = '/api/clients/' + clientId + '/qr.png?t=' + Date.now();
+          const qrUrl = '/api/clients/' + encodeURIComponent(clientId) + '/qr.png?t=' + Date.now();
           qrImage.src = qrUrl;
           qrImage.onload = () => {
             qrImage.style.display = 'block';
             qrLoading.style.display = 'none';
           };
-        } else if (data.status === 'connecting') {
+        } else if (data && data.status === 'connecting') {
           statusBadge.className = 'badge connecting';
           badgeText.textContent = 'Bağlantı Hazırlanıyor...';
           qrImage.style.display = 'none';
@@ -275,7 +309,7 @@
           qrLoading.innerHTML = '<div class="spinner"></div><span>Bağlantı kuruluyor...</span>';
         }
       } catch (err) {
-        console.error('[STATUS ERROR]', err);
+        console.warn('[STATUS ERROR]', err.message || err);
       } finally {
         if (isPolling) {
           setTimeout(pollStatus, 1500);

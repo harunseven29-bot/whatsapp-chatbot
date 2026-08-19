@@ -17,6 +17,14 @@ const { generateReply } = require('./assistant');
 const clientManager = require('./client-manager');
 
 /**
+ * Get Public Base URL (fallback to localhost:PORT)
+ */
+function getPublicBaseUrl() {
+  const port = process.env.PORT || 3000;
+  return (process.env.PUBLIC_BASE_URL || `http://localhost:${port}`).replace(/\/+$/, '');
+}
+
+/**
  * Determine the runtime auth directory base
  */
 function resolveRuntimeAuthBase() {
@@ -299,7 +307,7 @@ async function startWhatsAppClient(clientId, isReconnect = false) {
         console.log('==========================================');
         console.log(`📱 [${clientId}] ${client.config.businessName || 'WhatsApp'} BAĞLANTISI BEKLENİYOR`);
         console.log('Connect URL:');
-        console.log(`https://whatsapp-chatbot.dockhosting.dev/connect/${clientId}`);
+        console.log(`${getPublicBaseUrl()}/connect/${clientId}`);
         console.log('==========================================');
         console.log('');
       }
@@ -504,6 +512,7 @@ async function disconnectAllClients() {
 }
 
 module.exports = {
+  getPublicBaseUrl,
   startAllEnabledClients,
   startWhatsAppClient,
   logoutWhatsAppClient,
