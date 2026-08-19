@@ -295,6 +295,10 @@
             qrImage.style.display = 'block';
             qrLoading.style.display = 'none';
           };
+          qrImage.onerror = () => {
+            qrImage.style.display = 'none';
+            qrLoading.style.display = 'flex';
+          };
         } else if (data && data.status === 'connecting') {
           statusBadge.className = 'badge connecting';
           badgeText.textContent = 'Bağlantı Hazırlanıyor...';

@@ -183,6 +183,26 @@ function backupAuth(clientId) {
 }
 
 /**
+ * Remove auth directories for a specific client ONLY
+ */
+function clearClientAuth(clientId) {
+  try {
+    const runtimeDir = getRuntimeAuthDir(clientId);
+    const persistentDir = getPersistentAuthDir(clientId);
+
+    if (fs.existsSync(runtimeDir)) {
+      fs.rmSync(runtimeDir, { recursive: true, force: true });
+    }
+    if (persistentDir && fs.existsSync(persistentDir)) {
+      fs.rmSync(persistentDir, { recursive: true, force: true });
+    }
+    console.log(`[${clientId}][AUTH] Eski auth klasörleri temizlendi.`);
+  } catch (err) {
+    console.error(`[${clientId}][AUTH] Temizleme hatası:`, err.message);
+  }
+}
+
+/**
  * Cleanly destroy previous socket and listeners for a client
  */
 function cleanupClientSocket(client) {
@@ -236,6 +256,9 @@ async function startWhatsAppClient(clientId, isReconnect = false) {
     // 1. Restore auth state
     restoreAuth(clientId);
     const clientAuthDir = getRuntimeAuthDir(clientId);
+    if (!fs.existsSync(clientAuthDir)) {
+      fs.mkdirSync(clientAuthDir, { recursive: true });
+    }
 
     client.status = 'connecting';
     client.updatedAt = Date.now();
@@ -346,16 +369,27 @@ async function startWhatsAppClient(clientId, isReconnect = false) {
 
       if (connection === 'close') {
         client.currentQr = null;
+        client.qrUpdatedAt = null;
         client.status = 'disconnected';
+        client.jid = null;
+        client.userName = null;
         client.connectedAt = null;
         client.updatedAt = Date.now();
 
         console.log(`[${clientId}][WA CLOSE] statusCode:`, statusCode);
 
-        if (statusCode === DisconnectReason.loggedOut) {
-          console.log(`[${clientId}][WA] Gerçek logout (401). Otomatik reconnect yapılmayacak.`);
-          client.jid = null;
-          client.userName = null;
+        // 401 (loggedOut) - Telefondan çıkış yapıldı veya oturum geçersiz kılındı
+        if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+          console.log(`[${clientId}][WA] 401 Logout alındı. Eski oturum verileri temizlenip yeni QR eşleme moduna geçiliyor...`);
+          
+          // 1. Mevcut eski soketi temizle
+          cleanupClientSocket(client);
+
+          // 2. SADECE bu client'a ait auth dosyalarını sil (diğer client'lara dokunma)
+          clearClientAuth(clientId);
+
+          // 3. Yeni QR üretmek üzere unauthenticated soket başlat
+          scheduleClientReconnect(clientId, 1000);
           return;
         }
 
@@ -366,7 +400,7 @@ async function startWhatsAppClient(clientId, isReconnect = false) {
           return;
         }
 
-        // Diğer geçici bağlantı kapanmalarında da auth'u SİLMEDEN reconnect.
+        // Diğer geçici bağlantı kapanmalarında auth'u silmeden reconnect yap.
         scheduleClientReconnect(clientId, 1500);
       } else if (connection === 'connecting') {
         client.status = 'connecting';
@@ -479,20 +513,7 @@ async function logoutWhatsAppClient(clientId) {
   client.connectedAt = null;
   client.updatedAt = Date.now();
 
-  try {
-    const runtimeDir = getRuntimeAuthDir(clientId);
-    const persistentDir = getPersistentAuthDir(clientId);
-
-    if (fs.existsSync(runtimeDir)) {
-      fs.rmSync(runtimeDir, { recursive: true, force: true });
-    }
-    if (persistentDir && fs.existsSync(persistentDir)) {
-      fs.rmSync(persistentDir, { recursive: true, force: true });
-    }
-    console.log(`[${clientId}][AUTH] Auth klasörleri temizlendi.`);
-  } catch (err) {
-    console.error(`[${clientId}][AUTH] Temizleme hatası:`, err.message);
-  }
+  clearClientAuth(clientId);
 
   scheduleClientReconnect(clientId, 1000);
   return { success: true, message: 'Oturum kapatıldı, yeni QR bekleniyor.' };
