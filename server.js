@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 /**
  * Express HTTP Server & Multi-Client WhatsApp Bot Host
  * Ultra-lightweight backend (Max 5 Clients)
@@ -236,6 +238,7 @@ async function bootstrap() {
     }
 
     console.log(`[HTTP] Sunucu aktif: http://${HOSTNAME}:${PORT}`);
+    console.log('[ENV] PUBLIC_BASE_URL:', process.env.PUBLIC_BASE_URL);
     console.log(`[HTTP] Public Base URL: ${PUBLIC_BASE_URL}`);
     console.log(`[HTTP] Health Check: ${PUBLIC_BASE_URL}/health`);
     console.log(`[HTTP] Client-001 Connect URL: ${PUBLIC_BASE_URL}/connect/client-001`);
