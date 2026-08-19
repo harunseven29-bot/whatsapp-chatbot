@@ -1,187 +1,226 @@
 /**
- * WhatsApp Gemini Bot - Ultra-Lightweight Production Server
- * Pure Backend PNG QR & Web QR Page Pipeline
+ * Express HTTP Server & Multi-Client WhatsApp Bot Host
+ * Ultra-lightweight backend (Max 5 Clients)
  */
-
-require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const QRCode = require('qrcode');
 const {
-  startWhatsApp,
-  disconnectWhatsApp,
-  logoutWhatsApp,
-  getCurrentQr,
-  getQrUpdatedAt,
-  whatsappState,
-  AUTH_DIR
+  startAllEnabledClients,
+  startWhatsAppClient,
+  logoutWhatsAppClient,
+  disconnectAllClients
 } = require('./whatsapp');
-const { getBusinessData } = require('./business');
+const clientManager = require('./client-manager');
 const { getMemoryStats } = require('./assistant');
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = 3000;
 const HOSTNAME = '0.0.0.0';
 
 async function bootstrap() {
-  console.log('======================================================');
-  console.log('🚀 WhatsApp Gemini Bot - Production Server');
-  console.log(`📁 Auth Klasörü: ${AUTH_DIR}`);
-  console.log(`🌐 Port: ${PORT}`);
-  console.log('======================================================');
-
-  const business = getBusinessData();
   const app = express();
-  app.use(express.json());
 
-  // CORS middleware
+  // Basic middleware
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+  // CORS and Cache-Control headers
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Pragma');
     if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
+      return res.sendStatus(204);
     }
     next();
   });
 
-  // 1. Authoritative Realtime Status API: GET /api/whatsapp/status
-  app.get('/api/whatsapp/status', (req, res) => {
-    const currentQr = getCurrentQr();
-    res.set('Cache-Control', 'no-store');
-    return res.status(200).json({
-      status: whatsappState.status,
-      hasQr: !!currentQr,
-      jid: whatsappState.jid,
-      userName: whatsappState.userName,
-      connectedAt: whatsappState.connectedAt,
-      updatedAt: whatsappState.updatedAt
-    });
+  // Serve static assets if any
+  app.use(express.static(path.join(__dirname, 'public')));
+
+  // 1. Client Connect Page: GET /connect/:clientId
+  app.get('/connect/:clientId', (req, res) => {
+    const { clientId } = req.params;
+    const client = clientManager.getClient(clientId);
+
+    if (!client && !clientManager.loadAllClientConfigs().some(c => c.id === clientId && c.enabled)) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head><title>Müşteri Bulunamadı</title><meta charset="utf-8"></head>
+        <body style="background:#0f172a;color:#f8fafc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+          <div style="text-align:center;padding:24px;background:#1e293b;border-radius:12px;border:1px solid #334155;">
+            <h2 style="color:#f43f5e;margin-bottom:8px;">Müşteri Bulunamadı veya Pasif</h2>
+            <p style="color:#94a3b8;">'${clientId}' kimlikli aktif bir müşteri yapılandırması mevcut değil.</p>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    const connectHtmlPath = path.join(__dirname, 'public', 'connect.html');
+    if (path.resolve(connectHtmlPath)) {
+      return res.sendFile(connectHtmlPath);
+    }
+    return res.sendFile(path.join(__dirname, 'qr.html'));
   });
 
-  // 2. Authoritative PNG QR Generator: GET /api/whatsapp/qr.png
-  app.get('/api/whatsapp/qr.png', async (req, res) => {
-    const currentQr = getCurrentQr();
+  // 2. Legacy /qr Route -> Redirect to client-001 connect page
+  app.get(['/qr', '/connect'], (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    return res.redirect('/connect/client-001');
+  });
 
-    if (!currentQr) {
-      return res.status(404).send('Aktif QR bekleniyor.');
+  // 3. Client Specific PNG QR: GET /api/clients/:clientId/qr.png
+  app.get('/api/clients/:clientId/qr.png', async (req, res) => {
+    const { clientId } = req.params;
+    const client = clientManager.getClient(clientId);
+
+    if (!client) {
+      return res.status(404).json({ error: 'Client not found or disabled', clientId });
+    }
+
+    if (!client.currentQr) {
+      return res.status(404).json({
+        error: 'QR not ready for this client',
+        clientId,
+        status: client.status,
+        hasQr: false
+      });
     }
 
     try {
-      const png = await QRCode.toBuffer(currentQr, {
+      const pngBuffer = await QRCode.toBuffer(client.currentQr, {
         type: 'png',
         width: 700,
         margin: 5,
-        errorCorrectionLevel: 'M'
+        errorCorrectionLevel: 'M',
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
       });
 
-      res.set({
-        'Content-Type': 'image/png',
-        'Cache-Control': 'no-store, no-cache, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      });
-
-      return res.send(png);
-
-    } catch (err) {
-      console.error('[QR PNG ERROR]', err);
-      return res.status(500).send('QR oluşturulamadı.');
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      return res.status(200).send(pngBuffer);
+    } catch (qrErr) {
+      console.error(`[QR Generator][${clientId}] Hata:`, qrErr.message);
+      return res.status(500).json({ error: 'Failed to generate QR image', details: qrErr.message });
     }
   });
 
-  // 3. Web QR Page: GET /qr & GET /connect
-  app.get(['/qr', '/connect'], (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.sendFile(path.join(__dirname, 'qr.html'));
+  // 4. Client Specific Status: GET /api/clients/:clientId/status
+  app.get('/api/clients/:clientId/status', (req, res) => {
+    const { clientId } = req.params;
+    const clientStatus = clientManager.getClientStatus(clientId);
+
+    if (!clientStatus) {
+      return res.status(404).json({ error: 'Client not found or disabled', clientId });
+    }
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    return res.status(200).json(clientStatus);
   });
 
-  // 4. WhatsApp Logout API: POST /api/whatsapp/logout
-  app.post('/api/whatsapp/logout', async (req, res) => {
-    const sessionId = req.body?.sessionId || 'default';
+  // 5. Client Specific Logout: POST /api/clients/:clientId/logout
+  app.post('/api/clients/:clientId/logout', async (req, res) => {
+    const { clientId } = req.params;
     try {
-      const result = await logoutWhatsApp(sessionId);
+      const result = await logoutWhatsAppClient(clientId);
       return res.status(200).json(result);
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
   });
 
-  // 5. Temporary Debug Auth Reset API: POST /api/debug/reset-auth
-  app.post('/api/debug/reset-auth', async (req, res) => {
-    try {
-      await disconnectWhatsApp('default');
-
-      fs.rmSync(AUTH_DIR, {
-        recursive: true,
-        force: true
-      });
-
-      fs.mkdirSync(AUTH_DIR, {
-        recursive: true
-      });
-
-      console.log('[DEBUG] Auth sıfırlandı:', AUTH_DIR);
-
-      return res.status(200).json({
-        success: true,
-        authDir: AUTH_DIR
-      });
-    } catch (err) {
-      console.error('[DEBUG] Auth sıfırlama hatası:', err.message);
-      return res.status(500).json({
-        success: false,
-        error: err.message,
-        authDir: AUTH_DIR
-      });
-    }
+  // 6. Backward Compatibility for single-client API:
+  // GET /api/whatsapp/qr.png
+  app.get('/api/whatsapp/qr.png', (req, res) => {
+    return res.redirect('/api/clients/client-001/qr.png');
   });
 
-  // 6. Root endpoint
+  // GET /api/whatsapp/status
+  app.get('/api/whatsapp/status', (req, res) => {
+    const status = clientManager.getClientStatus('client-001');
+    if (!status) {
+      return res.status(404).json({ error: 'client-001 not configured' });
+    }
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return res.status(200).json(status);
+  });
+
+  // POST /api/whatsapp/logout
+  app.post('/api/whatsapp/logout', async (req, res) => {
+    const result = await logoutWhatsAppClient('client-001');
+    return res.status(200).json(result);
+  });
+
+  // 7. Root endpoint
   app.get('/', (req, res) => {
     const acceptsHtml = req.accepts(['html', 'json']) === 'html';
     if (acceptsHtml) {
       res.set('Cache-Control', 'no-store');
-      return res.sendFile(path.join(__dirname, 'qr.html'));
+      return res.redirect('/connect/client-001');
     }
 
+    const enabledClients = clientManager.getEnabledClients();
     res.status(200).json({
       status: 'ok',
-      service: 'WhatsApp Gemini Bot',
-      qrUrl: '/qr',
-      qrPngUrl: '/api/whatsapp/qr.png'
+      service: 'Multi-Client WhatsApp Gemini Bot (Max 5 Clients)',
+      activeClients: enabledClients.length,
+      maxClients: clientManager.MAX_CLIENTS,
+      connectUrls: enabledClients.map(c => `/connect/${c.id}`)
     });
   });
 
-  // 7. Health check endpoint: GET /health
+  // 8. Health Check: GET /health
   app.get('/health', (req, res) => {
+    const enabledClients = clientManager.getEnabledClients();
+    const clientsOverview = enabledClients.map(c => {
+      const state = clientManager.getClient(c.id);
+      return {
+        id: c.id,
+        businessName: c.businessName,
+        status: state?.status || 'starting',
+        hasQr: Boolean(state?.currentQr),
+        jid: state?.jid || null
+      };
+    });
+
     res.status(200).json({
       status: 'healthy',
-      whatsapp: whatsappState.status === 'connected' ? 'connected' : whatsappState.status,
-      hasQr: !!getCurrentQr(),
+      activeClients: enabledClients.length,
+      maxClients: clientManager.MAX_CLIENTS,
+      clients: clientsOverview,
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     });
   });
 
-  // 8. Full System Overview: GET /status
+  // 9. Full System Overview: GET /status
   app.get('/status', (req, res) => {
     const memory = getMemoryStats();
+    const all = clientManager.getAllClients().map(c => clientManager.getClientStatus(c.id));
+
     res.status(200).json({
       status: 'ok',
-      whatsapp: whatsappState.status,
-      hasQr: !!getCurrentQr(),
-      user: whatsappState.userName || whatsappState.jid,
+      activeClientsCount: all.length,
+      maxClients: clientManager.MAX_CLIENTS,
+      clients: all,
       memory,
-      business: business.businessName,
-      hasApiKey: !!process.env.GEMINI_API_KEY,
+      hasGeminiApiKey: Boolean(process.env.GEMINI_API_KEY),
       uptimeSeconds: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     });
   });
 
-  // 9. Start HTTP Listener & SINGLE Baileys Background Socket
+  // 10. Start HTTP Listener & Multi-Client Baileys sockets
   const httpServer = app.listen(PORT, HOSTNAME, async (err) => {
     if (err) {
       console.error('❌ HTTP sunucu başlatılamadı:', err.message);
@@ -189,16 +228,14 @@ async function bootstrap() {
     }
 
     console.log(`[HTTP] Sunucu aktif: http://localhost:${PORT}`);
-    console.log(`[HTTP] QR Sayfası: http://localhost:${PORT}/qr`);
-    console.log(`[HTTP] Doğrudan PNG QR: http://localhost:${PORT}/api/whatsapp/qr.png`);
     console.log(`[HTTP] Health Check: http://localhost:${PORT}/health`);
+    console.log(`[HTTP] Client-001 Connect URL: http://localhost:${PORT}/connect/client-001`);
 
-    // Start single Baileys instance in background
+    // Start all enabled clients in background
     try {
-      console.log('[WhatsApp] Tekil Baileys soketi başlatılıyor...');
-      await startWhatsApp('default');
+      await startAllEnabledClients();
     } catch (waErr) {
-      console.error('❌ WhatsApp başlatma hatası:', waErr.message);
+      console.error('❌ WhatsApp multi-client başlatma hatası:', waErr.message);
     }
   });
 
@@ -206,7 +243,7 @@ async function bootstrap() {
   const shutdown = async (signal) => {
     console.log(`\n[Shutdown] ${signal} sinyali alındı.`);
     try {
-      await disconnectWhatsApp('default');
+      await disconnectAllClients();
     } catch (e) {}
     httpServer.close(() => {
       console.log('[Shutdown] HTTP sunucu kapatıldı.');

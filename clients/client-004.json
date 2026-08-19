@@ -1,0 +1,34 @@
+{
+  "id": "client-004",
+  "enabled": false,
+  "businessName": "Örnek İşletme 4",
+  "category": "Hizmet Sektörü",
+  "description": "WhatsApp Müşteri Asistanı",
+  "phone": "",
+  "address": "",
+  "instagram": "",
+  "website": "",
+  "openingHours": {
+    "monday": "09:00-18:00",
+    "tuesday": "09:00-18:00",
+    "wednesday": "09:00-18:00",
+    "thursday": "09:00-18:00",
+    "friday": "09:00-18:00",
+    "saturday": "09:00-14:00",
+    "sunday": "Kapalı"
+  },
+  "services": [],
+  "prices": {
+    "currency": "TRY",
+    "paymentMethods": "Kredi Kartı / Havale / Nakit",
+    "depositRequired": false,
+    "cancellationPolicy": ""
+  },
+  "faq": [],
+  "assistantInstructions": [
+    "Kısa ve doğal cevap ver.",
+    "Bilmediğin fiyatı uydurma.",
+    "Randevu talebinde kullanıcıdan uygun gün ve saat iste."
+  ],
+  "systemPrompt": "Sen bu işletmenin akıllı WhatsApp satış ve destek asistanısın."
+}

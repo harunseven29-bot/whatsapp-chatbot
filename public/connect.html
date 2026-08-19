@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WhatsApp Bağlantısı</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: #0f172a;
@@ -40,12 +44,37 @@
       color: #cbd5e1;
       white-space: nowrap;
     }
-    .badge.connected { background: #064e3b; color: #34d399; border: 1px solid #059669; }
-    .badge.waiting_qr { background: #451a03; color: #fbbf24; border: 1px solid #d97706; }
-    .badge.connecting { background: #1e3a8a; color: #60a5fa; border: 1px solid #2563eb; }
-    .badge.disconnected { background: #4c0519; color: #f43f5e; border: 1px solid #e11d48; }
-    .title { font-size: 20px; font-weight: 700; color: #ffffff; margin-bottom: 6px; }
-    .subtitle { font-size: 14px; color: #94a3b8; margin-bottom: 24px; }
+    .badge.connected {
+      background: #064e3b;
+      color: #34d399;
+      border: 1px solid #059669;
+    }
+    .badge.waiting_qr {
+      background: #451a03;
+      color: #fbbf24;
+      border: 1px solid #d97706;
+    }
+    .badge.connecting {
+      background: #1e3a8a;
+      color: #60a5fa;
+      border: 1px solid #2563eb;
+    }
+    .badge.disconnected {
+      background: #4c0519;
+      color: #f43f5e;
+      border: 1px solid #e11d48;
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
     .qr-frame {
       background: #ffffff;
       border-radius: 12px;
@@ -58,7 +87,13 @@
       height: 280px;
       position: relative;
     }
-    .qr-img { width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
+    .qr-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      image-rendering: pixelated;
+    }
     .qr-placeholder {
       display: flex;
       flex-direction: column;
@@ -78,7 +113,9 @@
       border-radius: 50%;
       animation: spin 0.9s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
     .instructions {
       text-align: left;
       background: #0f172a;
@@ -89,7 +126,9 @@
       line-height: 1.6;
       margin-top: 16px;
     }
-    .instructions ol { padding-left: 18px; }
+    .instructions ol {
+      padding-left: 18px;
+    }
     .success-box {
       background: #064e3b;
       border: 1px solid #059669;
@@ -98,12 +137,25 @@
       color: #ecfdf5;
       margin-bottom: 16px;
     }
-    .success-icon { font-size: 40px; margin-bottom: 12px; }
-    .connected-phone { font-weight: 700; color: #34d399; font-size: 16px; margin-top: 6px; }
-    .footer-note { font-size: 12px; color: #64748b; margin-top: 20px; }
+    .success-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+    .connected-phone {
+      font-weight: 700;
+      color: #34d399;
+      font-size: 16px;
+      margin-top: 6px;
+    }
+    .footer-note {
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
+
   <div class="card">
     <div id="statusBadge" class="badge">
       <span class="dot">●</span>
@@ -113,6 +165,7 @@
     <h1 id="businessTitle" class="title">WhatsApp Bağlantısı</h1>
     <p id="businessSubtitle" class="subtitle">İşletme Asistanı Entegrasyonu</p>
 
+    <!-- QR Container -->
     <div id="qrSection">
       <div class="qr-frame">
         <img id="qrImage" class="qr-img" style="display: none;" alt="WhatsApp QR Kodu">
@@ -131,6 +184,7 @@
       </div>
     </div>
 
+    <!-- Connected State Container -->
     <div id="connectedSection" style="display: none;">
       <div class="success-box">
         <div class="success-icon">✅</div>
@@ -146,8 +200,9 @@
   </div>
 
   <script>
+    // Extract clientId from URL: /connect/:clientId
     const pathParts = window.location.pathname.split('/').filter(Boolean);
-    const clientId = pathParts[pathParts.length - 1] === 'connect' || pathParts[pathParts.length - 1] === 'qr' || pathParts.length === 0
+    const clientId = pathParts[pathParts.length - 1] === 'connect' || pathParts[pathParts.length - 1] === 'qr'
       ? 'client-001'
       : pathParts[pathParts.length - 1];
 
@@ -199,6 +254,7 @@
           qrSection.style.display = 'block';
           connectedSection.style.display = 'none';
 
+          // Update QR Image with cache buster
           const qrUrl = '/api/clients/' + clientId + '/qr.png?t=' + Date.now();
           qrImage.src = qrUrl;
           qrImage.onload = () => {
@@ -231,6 +287,7 @@
       fetchStatus();
     }
 
+    // Start polling on load
     pollStatus();
   </script>
 </body>
