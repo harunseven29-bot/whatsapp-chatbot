@@ -1,6 +1,6 @@
 /**
  * WhatsApp Connection Manager using @whiskeysockets/baileys
- * Ultra-lightweight 24/7 backend - Pure Backend PNG QR Pipeline
+ * Ultra-lightweight 24/7 backend with Resilient Persistent Storage & Fast Reconnect
  */
 
 const {
@@ -15,10 +15,99 @@ const fs = require('fs');
 const path = require('path');
 const { generateReply } = require('./assistant');
 
-// Base Auth Directory
-const BASE_AUTH_DIR = process.env.AUTH_DIR
-  ? path.resolve(process.env.AUTH_DIR)
-  : path.resolve(__dirname, 'auth');
+/**
+ * Determine the most durable storage directory available in the host/container.
+ */
+function resolveBaseAuthDir() {
+  if (process.env.AUTH_DIR && process.env.AUTH_DIR.trim()) {
+    return path.resolve(process.env.AUTH_DIR.trim());
+  }
+
+  // Check known persistent volume mount points in containers (e.g. DockHosting / Docker / Railway)
+  const candidateMounts = ['/data/auth', '/data', '/persistent/auth', '/mnt/data/auth'];
+  for (const candidate of candidateMounts) {
+    try {
+      const parentDir = path.dirname(candidate);
+      if (fs.existsSync(candidate) || fs.existsSync(parentDir)) {
+        const target = candidate.endsWith('auth') ? candidate : path.join(candidate, 'auth');
+        if (!fs.existsSync(target)) {
+          fs.mkdirSync(target, { recursive: true });
+        }
+        return target;
+      }
+    } catch (e) {}
+  }
+
+  return path.resolve(__dirname, 'auth');
+}
+
+const BASE_AUTH_DIR = resolveBaseAuthDir();
+
+// Known backup/persistent directories for session synchronization
+const BACKUP_DIRS = [
+  '/data/auth',
+  path.resolve(__dirname, 'auth')
+].filter(dir => dir !== BASE_AUTH_DIR);
+
+/**
+ * Restore credentials from any available persistent backup if primary is empty
+ */
+function restorePersistedAuth(targetDir) {
+  try {
+    const credsPath = path.join(targetDir, 'creds.json');
+    if (fs.existsSync(credsPath)) {
+      return true; // Primary is already populated
+    }
+
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    for (const backupDir of BACKUP_DIRS) {
+      const backupCreds = path.join(backupDir, 'creds.json');
+      if (fs.existsSync(backupCreds)) {
+        console.log(`[Auth Persistence] Yedek auth deposundan (${backupDir}) oturum dosyaları geri yükleniyor -> ${targetDir}`);
+        const files = fs.readdirSync(backupDir);
+        for (const file of files) {
+          try {
+            fs.copyFileSync(path.join(backupDir, file), path.join(targetDir, file));
+          } catch (copyErr) {}
+        }
+        return true;
+      }
+    }
+  } catch (err) {
+    console.error('[Auth Persistence] Geri yükleme hatası:', err.message);
+  }
+  return false;
+}
+
+/**
+ * Mirror primary session files to backup locations for cross-container durability
+ */
+function syncAuthToBackup(sourceDir) {
+  try {
+    if (!fs.existsSync(sourceDir)) return;
+    const credsPath = path.join(sourceDir, 'creds.json');
+    if (!fs.existsSync(credsPath)) return;
+
+    for (const backupDir of BACKUP_DIRS) {
+      try {
+        if (!fs.existsSync(backupDir)) {
+          fs.mkdirSync(backupDir, { recursive: true });
+        }
+        const files = fs.readdirSync(sourceDir);
+        for (const file of files) {
+          try {
+            fs.copyFileSync(path.join(sourceDir, file), path.join(backupDir, file));
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+  } catch (err) {
+    // Non-critical background sync
+  }
+}
 
 // Authoritative Memory State
 let currentQr = null;
@@ -134,17 +223,17 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
   cleanupSocket(session);
 
   try {
-    // 1. Ensure persistent auth directory exists
+    // 1. Ensure persistent auth directory exists and restore backups if available
     if (!fs.existsSync(session.authDir)) {
       fs.mkdirSync(session.authDir, { recursive: true });
-      logEvent('info', `Kalıcı auth klasörü oluşturuldu: ${session.authDir}`, null, sessionId);
     }
+    restorePersistedAuth(session.authDir);
 
     whatsappState.status = 'connecting';
     whatsappState.updatedAt = Date.now();
     session.status = 'connecting';
 
-    // 2. Load multi-file auth state
+    // 2. Load multi-file auth state from persistent storage
     const { state, saveCreds } = await useMultiFileAuthState(session.authDir);
     const { version, isLatest } = await fetchLatestBaileysVersion().catch(() => ({
       version: [2, 3000, 1015901307],
@@ -152,9 +241,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     }));
 
     const isRegistered = Boolean(state?.creds?.registered);
-    if (!isReconnect || session.reconnectAttempts <= 1) {
-      logEvent('info', `Baileys v${version.join('.')} başlatılıyor (Registered: ${isRegistered}, isLatest: ${isLatest})`, null, sessionId);
-    }
+    logEvent('info', `Baileys v${version.join('.')} (Registered: ${isRegistered}, Storage: ${session.authDir})`, null, sessionId);
 
     // 3. Create SINGLE WhatsApp Socket
     const sock = makeWASocket({
@@ -179,16 +266,24 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     session.socket = sock;
     session.isInitializing = false;
 
-    // 4. Credential persistence handler
-    sock.ev.on('creds.update', saveCreds);
+    // 4. Credential persistence handler with automatic cross-storage sync
+    sock.ev.on('creds.update', async () => {
+      try {
+        await saveCreds();
+        syncAuthToBackup(session.authDir);
+      } catch (err) {
+        console.error('[Auth] creds.update kaydetme hatası:', err.message);
+      }
+    });
 
     // 5. Connection state update handler
     sock.ev.on('connection.update', async (update) => {
-      const { connection, qr, lastDisconnect } = update;
+      const { connection, qr, lastDisconnect, isNewLogin } = update;
 
       console.log('[WA EVENT]', {
         connection,
-        hasQr: !!qr
+        hasQr: !!qr,
+        isNewLogin: !!isNewLogin
       });
 
       if (qr) {
@@ -227,12 +322,19 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
         session.status = 'connected';
         session.reconnectAttempts = 0;
         session.isReconnecting = false;
+
+        // Ensure newly authenticated session is fully synced to persistent storage
+        try {
+          await saveCreds();
+          syncAuthToBackup(session.authDir);
+        } catch (e) {}
+
       } else if (connection === 'close') {
         currentQr = null;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const reason = lastDisconnect?.error?.message || 'Bağlantı kapandı';
         const isLoggedOut = statusCode === DisconnectReason.loggedOut;
-        const isRestartRequired = statusCode === DisconnectReason.restartRequired || statusCode === 515;
+        const isRestartRequired = statusCode === DisconnectReason.restartRequired || statusCode === 515 || isNewLogin;
 
         whatsappState.status = 'disconnected';
         whatsappState.connectedAt = null;
@@ -254,12 +356,12 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
             startWhatsApp(sessionId, true);
           }, 1500);
 
-        } else if (isRestartRequired) {
-          logEvent('info', 'WhatsApp akış anahtarları güncellendi (515 Restart Required), anında devam ediliyor...', null, sessionId);
+        } else if (isRestartRequired || statusCode === 515 || isNewLogin) {
+          logEvent('info', `WhatsApp yeni oturum / yeniden başlatma (Kod: ${statusCode || '515/isNewLogin'}), kalıcı oturum ile hemen bağlanılıyor...`, null, sessionId);
           session.isReconnecting = false;
           session.reconnectTimer = setTimeout(() => {
             startWhatsApp(sessionId, true);
-          }, 250);
+          }, 500);
 
         } else {
           logEvent('info', `Bağlantı tazeleniyor (Sebep: ${reason}, Kod: ${statusCode || 'Stream'})...`, null, sessionId);
@@ -378,6 +480,11 @@ async function logoutWhatsApp(sessionId = 'default') {
     if (fs.existsSync(session.authDir)) {
       fs.rmSync(session.authDir, { recursive: true, force: true });
       logEvent('info', 'Oturum auth klasörü temizlendi.', null, sessionId);
+    }
+    for (const backupDir of BACKUP_DIRS) {
+      if (fs.existsSync(backupDir)) {
+        fs.rmSync(backupDir, { recursive: true, force: true });
+      }
     }
   } catch (err) {
     console.error('[Auth] Temizleme hatası:', err.message);
