@@ -1,6 +1,6 @@
 /**
  * WhatsApp Connection Manager using @whiskeysockets/baileys
- * Ultra-lightweight 24/7 backend with Resilient Persistent Storage & Fast Reconnect
+ * Ultra-lightweight 24/7 backend - Resilient Post-Pairing Reconnect Pipeline
  */
 
 const {
@@ -56,7 +56,7 @@ function restorePersistedAuth(targetDir) {
   try {
     const credsPath = path.join(targetDir, 'creds.json');
     if (fs.existsSync(credsPath)) {
-      return true; // Primary is already populated
+      return true;
     }
 
     if (!fs.existsSync(targetDir)) {
@@ -104,14 +104,13 @@ function syncAuthToBackup(sourceDir) {
         }
       } catch (e) {}
     }
-  } catch (err) {
-    // Non-critical background sync
-  }
+  } catch (err) {}
 }
 
 // Authoritative Memory State
 let currentQr = null;
 let qrUpdatedAt = null;
+let reconnectScheduled = false;
 
 const whatsappState = {
   status: "starting", // "starting" | "connecting" | "waiting_qr" | "connected" | "disconnected"
@@ -141,9 +140,7 @@ function getOrCreateSession(sessionId = 'default') {
       socket: null,
       status: 'starting',
       reconnectAttempts: 0,
-      isReconnecting: false,
       isInitializing: false,
-      reconnectTimer: null,
       stats: {
         messagesReceived: 0,
         messagesSent: 0,
@@ -156,14 +153,31 @@ function getOrCreateSession(sessionId = 'default') {
 }
 
 /**
- * Clean logging helper
+ * Single reconnect scheduler to prevent duplicate sockets
  */
-function logEvent(type, message, details = null, sessionId = 'default') {
-  const prefix = `[WhatsApp${sessionId !== 'default' ? `:${sessionId}` : ''} - ${type.toUpperCase()}]`;
-  if (details) {
-    console.log(`${prefix} ${message}`, details);
-  } else {
-    console.log(`${prefix} ${message}`);
+function scheduleReconnect(delay = 1000, sessionId = 'default') {
+  if (reconnectScheduled) return;
+  reconnectScheduled = true;
+
+  setTimeout(async () => {
+    reconnectScheduled = false;
+    console.log('[WA] Kaydedilmiş auth ile socket yeniden başlatılıyor...');
+    await startWhatsApp(sessionId, true);
+  }, delay);
+}
+
+/**
+ * Cleanly destroy previous socket and listeners
+ */
+function cleanupSocket(session) {
+  if (session.socket) {
+    try {
+      session.socket.ev.removeAllListeners();
+    } catch (e) {}
+    try {
+      session.socket.end(undefined);
+    } catch (e) {}
+    session.socket = null;
   }
 }
 
@@ -183,39 +197,18 @@ function extractTextMessage(msg) {
 }
 
 /**
- * Cleanly destroy previous socket and listeners
- */
-function cleanupSocket(session) {
-  if (session.socket) {
-    try {
-      session.socket.ev.removeAllListeners();
-    } catch (e) {}
-    try {
-      session.socket.end(undefined);
-    } catch (e) {}
-    session.socket = null;
-  }
-}
-
-/**
- * Starts WhatsApp socket connection (Single instance)
+ * Starts WhatsApp socket connection
  */
 async function startWhatsApp(sessionId = 'default', isReconnect = false) {
   const session = getOrCreateSession(sessionId);
 
-  // Clear any existing reconnect timer
-  if (session.reconnectTimer) {
-    clearTimeout(session.reconnectTimer);
-    session.reconnectTimer = null;
-  }
-
   if (session.isInitializing && !isReconnect) {
-    logEvent('info', 'Oturum başlatma işlemi zaten devam ediyor.', null, sessionId);
+    console.log('[WA] Oturum başlatma işlemi zaten devam ediyor.');
     return session.socket;
   }
 
   if (!isReconnect && session.socket && whatsappState.status === 'connected') {
-    logEvent('info', 'WhatsApp zaten bağlı ve çalışıyor.', null, sessionId);
+    console.log('[WA] WhatsApp zaten bağlı ve çalışıyor.');
     return session.socket;
   }
 
@@ -235,13 +228,11 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
 
     // 2. Load multi-file auth state from persistent storage
     const { state, saveCreds } = await useMultiFileAuthState(session.authDir);
-    const { version, isLatest } = await fetchLatestBaileysVersion().catch(() => ({
-      version: [2, 3000, 1015901307],
-      isLatest: true
-    }));
+    console.log('[AUTH] Registered:', state.creds.registered);
 
-    const isRegistered = Boolean(state?.creds?.registered);
-    logEvent('info', `Baileys v${version.join('.')} (Registered: ${isRegistered}, Storage: ${session.authDir})`, null, sessionId);
+    const { version } = await fetchLatestBaileysVersion().catch(() => ({
+      version: [2, 3000, 1015901307]
+    }));
 
     // 3. Create SINGLE WhatsApp Socket
     const sock = makeWASocket({
@@ -266,24 +257,32 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     session.socket = sock;
     session.isInitializing = false;
 
-    // 4. Credential persistence handler with automatic cross-storage sync
+    // 4. Credential persistence handler
     sock.ev.on('creds.update', async () => {
-      try {
-        await saveCreds();
-        syncAuthToBackup(session.authDir);
-      } catch (err) {
-        console.error('[Auth] creds.update kaydetme hatası:', err.message);
-      }
+      await saveCreds();
+      console.log('[AUTH] Credentials kaydedildi.');
+      syncAuthToBackup(session.authDir);
     });
 
     // 5. Connection state update handler
     sock.ev.on('connection.update', async (update) => {
-      const { connection, qr, lastDisconnect, isNewLogin } = update;
+      const {
+        connection,
+        lastDisconnect,
+        qr,
+        isNewLogin
+      } = update;
+
+      const statusCode =
+        lastDisconnect?.error?.output?.statusCode ||
+        lastDisconnect?.error?.statusCode ||
+        null;
 
       console.log('[WA EVENT]', {
         connection,
         hasQr: !!qr,
-        isNewLogin: !!isNewLogin
+        isNewLogin: !!isNewLogin,
+        statusCode
       });
 
       if (qr) {
@@ -302,81 +301,73 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
         console.log('');
       }
 
+      if (isNewLogin) {
+        console.log(
+          '[AUTH] QR kabul edildi. İlk login tamamlandı; socket restart bekleniyor.'
+        );
+      }
+
       if (connection === 'open') {
+        reconnectScheduled = false;
         currentQr = null;
-        const user = sock.user;
 
         console.log('');
         console.log('==========================================');
         console.log('✅ WHATSAPP BAŞARIYLA BAĞLANDI');
-        console.log('JID:', user?.id || 'unknown');
+        console.log('JID:', sock.user?.id || 'unknown');
         console.log('==========================================');
         console.log('');
 
         whatsappState.status = 'connected';
-        whatsappState.jid = user?.id || 'unknown';
-        whatsappState.userName = user?.name || 'WhatsApp Hesabı';
+        whatsappState.jid = sock.user?.id || 'unknown';
+        whatsappState.userName = sock.user?.name || 'WhatsApp Hesabı';
         whatsappState.connectedAt = Date.now();
         whatsappState.updatedAt = Date.now();
 
         session.status = 'connected';
         session.reconnectAttempts = 0;
-        session.isReconnecting = false;
 
         // Ensure newly authenticated session is fully synced to persistent storage
         try {
           await saveCreds();
           syncAuthToBackup(session.authDir);
         } catch (e) {}
+        return;
+      }
 
-      } else if (connection === 'close') {
+      if (connection === 'close') {
         currentQr = null;
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const reason = lastDisconnect?.error?.message || 'Bağlantı kapandı';
-        const isLoggedOut = statusCode === DisconnectReason.loggedOut;
-        const isRestartRequired = statusCode === DisconnectReason.restartRequired || statusCode === 515 || isNewLogin;
-
         whatsappState.status = 'disconnected';
         whatsappState.connectedAt = null;
         whatsappState.updatedAt = Date.now();
         session.status = 'disconnected';
 
-        if (isLoggedOut) {
-          logEvent('info', 'Oturum kapatıldı (Logged out). Auth klasörü yenileniyor.', null, sessionId);
+        console.log(
+          '[WA CLOSE]',
+          'statusCode:',
+          statusCode
+        );
+
+        if (statusCode === DisconnectReason.loggedOut) {
+          console.log(
+            '[WA] Gerçek logout (401). Otomatik reconnect yapılmayacak.'
+          );
           whatsappState.jid = null;
           whatsappState.userName = null;
-
-          try {
-            if (fs.existsSync(session.authDir)) {
-              fs.rmSync(session.authDir, { recursive: true, force: true });
-            }
-          } catch (e) {}
-
-          session.reconnectTimer = setTimeout(() => {
-            startWhatsApp(sessionId, true);
-          }, 1500);
-
-        } else if (isRestartRequired || statusCode === 515 || isNewLogin) {
-          logEvent('info', `WhatsApp yeni oturum / yeniden başlatma (Kod: ${statusCode || '515/isNewLogin'}), kalıcı oturum ile hemen bağlanılıyor...`, null, sessionId);
-          session.isReconnecting = false;
-          session.reconnectTimer = setTimeout(() => {
-            startWhatsApp(sessionId, true);
-          }, 500);
-
-        } else {
-          logEvent('info', `Bağlantı tazeleniyor (Sebep: ${reason}, Kod: ${statusCode || 'Stream'})...`, null, sessionId);
-
-          if (!session.isReconnecting) {
-            session.isReconnecting = true;
-            session.reconnectAttempts += 1;
-            const delay = Math.min(session.reconnectAttempts * 1500, 10000);
-
-            session.reconnectTimer = setTimeout(() => {
-              session.isReconnecting = false;
-              startWhatsApp(sessionId, true);
-            }, delay);
-          }
+          return;
         }
+
+        // İlk QR pairing sonrası Baileys genellikle restartRequired (515) ile socket restart ister.
+        if (statusCode === DisconnectReason.restartRequired || statusCode === 515) {
+          console.log(
+            '[WA] Pairing başarılı. 515 restartRequired alındı.'
+          );
+          scheduleReconnect(500, sessionId);
+          return;
+        }
+
+        // Diğer geçici bağlantı kapanmalarında da auth'u SİLMEDEN reconnect.
+        scheduleReconnect(1500, sessionId);
       } else if (connection === 'connecting') {
         whatsappState.status = 'connecting';
         whatsappState.updatedAt = Date.now();
@@ -406,7 +397,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           session.stats.lastActivity = new Date().toISOString();
 
           const senderName = msg.pushName || remoteJid.split('@')[0];
-          logEvent('mesaj', `📩 [${senderName} (${remoteJid})]: "${userText}"`, null, sessionId);
+          console.log(`📩 [${senderName} (${remoteJid})]: "${userText}"`);
 
           try {
             await sock.sendPresenceUpdate('composing', remoteJid);
@@ -421,10 +412,10 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
           await sock.sendMessage(remoteJid, { text: aiResponse });
 
           session.stats.messagesSent += 1;
-          logEvent('cevap', `🤖 [Yanıt -> ${senderName}]: "${aiResponse.substring(0, 80)}..."`, null, sessionId);
+          console.log(`🤖 [Yanıt -> ${senderName}]: "${aiResponse.substring(0, 80)}..."`);
         } catch (msgErr) {
           session.stats.errors += 1;
-          logEvent('bilgi', `Mesaj işleme durumu: ${msgErr.message}`, null, sessionId);
+          console.error(`[Mesaj Hatası]: ${msgErr.message}`);
         }
       }
     });
@@ -436,11 +427,9 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
     whatsappState.updatedAt = Date.now();
     session.status = 'disconnected';
     session.stats.errors += 1;
-    logEvent('info', `WhatsApp başlatma tazeleniyor: ${initErr.message}`, null, sessionId);
+    console.error(`[WA] Başlatma hatası: ${initErr.message}`);
 
-    session.reconnectTimer = setTimeout(() => {
-      startWhatsApp(sessionId, true);
-    }, 3000);
+    scheduleReconnect(3000, sessionId);
   }
 }
 
@@ -449,12 +438,7 @@ async function startWhatsApp(sessionId = 'default', isReconnect = false) {
  */
 async function logoutWhatsApp(sessionId = 'default') {
   const session = getOrCreateSession(sessionId);
-  logEvent('info', 'Oturum kapatma talebi alındı.', null, sessionId);
-
-  if (session.reconnectTimer) {
-    clearTimeout(session.reconnectTimer);
-    session.reconnectTimer = null;
-  }
+  console.log('[WA] Oturum kapatma talebi alındı.');
 
   if (session.socket) {
     try {
@@ -474,12 +458,11 @@ async function logoutWhatsApp(sessionId = 'default') {
 
   session.status = 'disconnected';
   session.isInitializing = false;
-  session.isReconnecting = false;
 
   try {
     if (fs.existsSync(session.authDir)) {
       fs.rmSync(session.authDir, { recursive: true, force: true });
-      logEvent('info', 'Oturum auth klasörü temizlendi.', null, sessionId);
+      console.log('[Auth] Oturum auth klasörü temizlendi.');
     }
     for (const backupDir of BACKUP_DIRS) {
       if (fs.existsSync(backupDir)) {
@@ -490,10 +473,7 @@ async function logoutWhatsApp(sessionId = 'default') {
     console.error('[Auth] Temizleme hatası:', err.message);
   }
 
-  session.reconnectTimer = setTimeout(() => {
-    startWhatsApp(sessionId, true);
-  }, 1000);
-
+  scheduleReconnect(1000, sessionId);
   return { success: true, message: 'Oturum kapatıldı, yeni QR bekleniyor.' };
 }
 
@@ -502,16 +482,12 @@ async function logoutWhatsApp(sessionId = 'default') {
  */
 async function disconnectWhatsApp(sessionId = 'default') {
   const session = getOrCreateSession(sessionId);
-  if (session.reconnectTimer) {
-    clearTimeout(session.reconnectTimer);
-    session.reconnectTimer = null;
-  }
   cleanupSocket(session);
   currentQr = null;
   whatsappState.status = 'disconnected';
   whatsappState.updatedAt = Date.now();
   session.status = 'disconnected';
-  logEvent('info', 'WhatsApp soketi güvenli kapatıldı.', null, sessionId);
+  console.log('[WA] WhatsApp soketi güvenli kapatıldı.');
 }
 
 module.exports = {
