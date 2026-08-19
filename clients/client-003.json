@@ -1,34 +1,76 @@
 {
   "id": "client-003",
-  "enabled": false,
-  "businessName": "Örnek İşletme 3",
-  "category": "Hizmet Sektörü",
-  "description": "WhatsApp Müşteri Asistanı",
-  "phone": "",
-  "address": "",
-  "instagram": "",
+  "enabled": true,
+  "businessName": "Apex Auto Detailing",
+  "category": "Oto Detailing & Araç Bakım",
+  "description": "Edirne Merkez'de detaylı iç temizlik, pasta cila, seramik kaplama, motor temizliği ve far parlatma hizmetleri sunan profesyonel araç bakım merkezi.",
+  "phone": "+90 555 300 30 03",
+  "address": "Edirne Merkez, Edirne",
+  "instagram": "@apexautodetailing",
   "website": "",
   "openingHours": {
-    "monday": "09:00-18:00",
-    "tuesday": "09:00-18:00",
-    "wednesday": "09:00-18:00",
-    "thursday": "09:00-18:00",
-    "friday": "09:00-18:00",
-    "saturday": "09:00-14:00",
+    "monday": "09:00-19:00",
+    "tuesday": "09:00-19:00",
+    "wednesday": "09:00-19:00",
+    "thursday": "09:00-19:00",
+    "friday": "09:00-19:00",
+    "saturday": "09:00-18:00",
     "sunday": "Kapalı"
   },
-  "services": [],
+  "services": [
+    {
+      "name": "Detaylı İç Temizlik",
+      "description": "Koltuk, taban, plastik yüzeyler ve bagaj dahil detaylı iç mekan temizliği.",
+      "durationMinutes": 180,
+      "price": "1.750 TL"
+    },
+    {
+      "name": "Pasta Cila",
+      "description": "Boya yüzeyindeki hafif çiziklerin azaltılması ve parlaklığın artırılması.",
+      "durationMinutes": 120,
+      "price": "3.500 TL"
+    },
+    {
+      "name": "Seramik Kaplama",
+      "description": "Araç boyasını dış etkenlere karşı korumaya yardımcı seramik kaplama uygulaması.",
+      "durationMinutes": 240,
+      "price": "7.500 TL"
+    },
+    {
+      "name": "Motor Temizliği",
+      "description": "Motor bölmesinin kontrollü detay temizliği.",
+      "durationMinutes": 60,
+      "price": "1.250 TL"
+    },
+    {
+      "name": "Far Parlatma",
+      "description": "Matlaşmış far yüzeylerinin temizlenmesi ve parlatılması.",
+      "durationMinutes": 45,
+      "price": "900 TL"
+    }
+  ],
   "prices": {
     "currency": "TRY",
     "paymentMethods": "Kredi Kartı / Havale / Nakit",
     "depositRequired": false,
-    "cancellationPolicy": ""
+    "cancellationPolicy": "Randevu saatinden önce haber verilmesi rica olunur."
   },
-  "faq": [],
-  "assistantInstructions": [
-    "Kısa ve doğal cevap ver.",
-    "Bilmediğin fiyatı uydurma.",
-    "Randevu talebinde kullanıcıdan uygun gün ve saat iste."
+  "faq": [
+    {
+      "question": "İşlem ne kadar sürer?",
+      "answer": "Yapılacak uygulamaya ve aracın durumuna göre 1 saat ile 1 gün arasında değişmektedir. Randevu esnasında net süre bilgisi verilir."
+    },
+    {
+      "question": "Randevu gerekli mi?",
+      "answer": "Evet, kaliteli ve özenli hizmet sunabilmemiz için önceden randevu oluşturmanızı rica ederiz."
+    }
   ],
-  "systemPrompt": "Sen bu işletmenin akıllı WhatsApp satış ve destek asistanısın."
+  "assistantInstructions": [
+    "Doğal, samimi ve profesyonel Türkçe ile WhatsApp üzerinden konuş.",
+    "Fiyat, kampanya veya hizmet uydurma; yalnızca Apex Auto Detailing'in güncel hizmet ve fiyat listesine sadık kal.",
+    "Gerekirse müşteriden araç marka ve modelini sorarak uygun hizmeti öner.",
+    "Randevu taleplerinde isim-soyisim, araç marka/modeli ve tercih edilen gün/saat bilgisini iste.",
+    "Yetkili veya insan temsilci talebinde yetkiliye aktarım başlat."
+  ],
+  "systemPrompt": "Sen Apex Auto Detailing'in (Edirne Merkez) profesyonel, samimi ve yardımsever WhatsApp asistanısın. Müşterilerimizin detaylı iç temizlik, pasta cila, seramik kaplama, motor temizliği ve far parlatma hakkındaki sorularını yanıtla, fiyat ve randevu konusunda yardımcı ol."
 }

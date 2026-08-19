@@ -1,34 +1,78 @@
 {
   "id": "client-005",
-  "enabled": false,
-  "businessName": "Örnek İşletme 5",
-  "category": "Hizmet Sektörü",
-  "description": "WhatsApp Müşteri Asistanı",
-  "phone": "",
-  "address": "",
-  "instagram": "",
+  "enabled": true,
+  "businessName": "Luna Beauty Studio",
+  "category": "Güzellik Salonu",
+  "description": "Edirne Merkez'de hydrafacial, kirpik lifting, kaş laminasyonu, profesyonel cilt bakımı, manikür ve kalıcı oje uygulamaları sunan güzellik stüdyosu.",
+  "phone": "+90 555 500 50 05",
+  "address": "Edirne Merkez, Edirne",
+  "instagram": "@lunabeautystudio",
   "website": "",
   "openingHours": {
-    "monday": "09:00-18:00",
-    "tuesday": "09:00-18:00",
-    "wednesday": "09:00-18:00",
-    "thursday": "09:00-18:00",
-    "friday": "09:00-18:00",
-    "saturday": "09:00-14:00",
+    "monday": "09:30-19:30",
+    "tuesday": "09:30-19:30",
+    "wednesday": "09:30-19:30",
+    "thursday": "09:30-19:30",
+    "friday": "09:30-19:30",
+    "saturday": "09:30-18:00",
     "sunday": "Kapalı"
   },
-  "services": [],
+  "services": [
+    {
+      "name": "Hydrafacial",
+      "description": "Cildin temizlenmesi, nemlendirilmesi ve bakımına yönelik yüz bakımı.",
+      "durationMinutes": 60,
+      "price": "1.400 TL"
+    },
+    {
+      "name": "Kirpik Lifting",
+      "description": "Doğal kirpiklere kıvrım ve belirginlik kazandıran uygulama.",
+      "durationMinutes": 45,
+      "price": "850 TL"
+    },
+    {
+      "name": "Kaş Laminasyonu",
+      "description": "Kaşların daha düzenli ve şekilli görünmesine yardımcı uygulama.",
+      "durationMinutes": 45,
+      "price": "800 TL"
+    },
+    {
+      "name": "Profesyonel Cilt Bakımı",
+      "description": "Cilt tipine göre uygulanan temel profesyonel bakım.",
+      "durationMinutes": 60,
+      "price": "1.100 TL"
+    },
+    {
+      "name": "Manikür",
+      "description": "Tırnak ve el bakımı.",
+      "durationMinutes": 40,
+      "price": "500 TL"
+    },
+    {
+      "name": "Kalıcı Oje",
+      "description": "Uzun süre kalıcılık sağlayan oje uygulaması.",
+      "durationMinutes": 50,
+      "price": "650 TL"
+    }
+  ],
   "prices": {
     "currency": "TRY",
-    "paymentMethods": "Kredi Kartı / Havale / Nakit",
+    "paymentMethods": "Kredi Kartı / Nakit",
     "depositRequired": false,
-    "cancellationPolicy": ""
+    "cancellationPolicy": "Randevudan en az 24 saat önce haber verilmesi rica olunur."
   },
-  "faq": [],
-  "assistantInstructions": [
-    "Kısa ve doğal cevap ver.",
-    "Bilmediğin fiyatı uydurma.",
-    "Randevu talebinde kullanıcıdan uygun gün ve saat iste."
+  "faq": [
+    {
+      "question": "Kirpik lifting ve kaş laminasyonu ne kadar süre kalıcıdır?",
+      "answer": "Kişinin kıl yapısına bağlı olarak ortalama 6-8 hafta boyunca kalıcılığını korur."
+    }
   ],
-  "systemPrompt": "Sen bu işletmenin akıllı WhatsApp satış ve destek asistanısın."
+  "assistantInstructions": [
+    "Sıcak, nazik ve samimi bir dille WhatsApp üzerinden iletişim kur.",
+    "Tıbbi veya medikal iddialarda bulunma, kesin sonuç garantisi verme.",
+    "Fiyat, kampanya veya hizmet uydurma; sadece Luna Beauty Studio'nun güncel listesine sadık kal.",
+    "Randevu taleplerinde isim-soyisim, ilgilenilen hizmet ve tercih edilen tarih/saat bilgisini iste.",
+    "Yetkili veya uzman yönlendirmesi istendiğinde yetkiliye aktarım başlat."
+  ],
+  "systemPrompt": "Sen Luna Beauty Studio'nun (Edirne Merkez) nazik, samimi ve yardımsever WhatsApp asistanısın. Hydrafacial, kirpik lifting, kaş laminasyonu, cilt bakımı, manikür ve kalıcı oje hizmetleri hakkında danışanlarımıza bilgi ver ve randevu taleplerini al."
 }

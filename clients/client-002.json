@@ -1,34 +1,61 @@
 {
   "id": "client-002",
-  "enabled": false,
-  "businessName": "Örnek İşletme 2",
-  "category": "Hizmet Sektörü",
-  "description": "WhatsApp Müşteri Asistanı",
+  "enabled": true,
+  "businessName": "Test Kafe",
+  "category": "Kafe & Restoran",
+  "description": "Tekirdağ'da lezzetli kahve çeşitleri, taze günlük tatlılar ve zengin kahvaltı seçenekleri sunan samimi kafe.",
   "phone": "",
-  "address": "",
-  "instagram": "",
+  "address": "Tekirdağ",
+  "instagram": "@testkafe",
   "website": "",
   "openingHours": {
-    "monday": "09:00-18:00",
-    "tuesday": "09:00-18:00",
-    "wednesday": "09:00-18:00",
-    "thursday": "09:00-18:00",
-    "friday": "09:00-18:00",
-    "saturday": "09:00-14:00",
-    "sunday": "Kapalı"
+    "monday": "09:00-23:00",
+    "tuesday": "09:00-23:00",
+    "wednesday": "09:00-23:00",
+    "thursday": "09:00-23:00",
+    "friday": "09:00-00:00",
+    "saturday": "09:00-00:00",
+    "sunday": "10:00-23:00"
   },
-  "services": [],
+  "services": [
+    {
+      "name": "Kahve Çeşitleri",
+      "description": "Espresso bazlı kahveler, filtre kahve, Türk kahvesi ve özel soğuk demlemeler",
+      "durationMinutes": 15,
+      "price": "Fiyat bilgisi için lütfen kafemizi ziyaret ediniz veya sorunuz"
+    },
+    {
+      "name": "Tatlılar",
+      "description": "Günlük taze tatlılar, cheesecake, brownie ve pasta çeşitleri",
+      "durationMinutes": 15,
+      "price": "Fiyat bilgisi için lütfen kafemizi ziyaret ediniz veya sorunuz"
+    },
+    {
+      "name": "Kahvaltı",
+      "description": "Zengin serpme kahvaltı ve kahvaltı tabağı seçenekleri",
+      "durationMinutes": 45,
+      "price": "Fiyat bilgisi için lütfen kafemizi ziyaret ediniz veya sorunuz"
+    }
+  ],
   "prices": {
     "currency": "TRY",
-    "paymentMethods": "Kredi Kartı / Havale / Nakit",
+    "paymentMethods": "Kredi Kartı / Nakit",
     "depositRequired": false,
     "cancellationPolicy": ""
   },
-  "faq": [],
-  "assistantInstructions": [
-    "Kısa ve doğal cevap ver.",
-    "Bilmediğin fiyatı uydurma.",
-    "Randevu talebinde kullanıcıdan uygun gün ve saat iste."
+  "faq": [
+    {
+      "question": "Rezervasyon gerekli mi?",
+      "answer": "Hafta sonu yoğun saatlerde veya kalabalık gruplar için WhatsApp üzerinden önceden masanızı ayırtabilirsiniz."
+    }
   ],
-  "systemPrompt": "Sen bu işletmenin akıllı WhatsApp satış ve destek asistanısın."
+  "assistantInstructions": [
+    "Test Kafe adına samimi, sıcak ve kibar bir dille konuş.",
+    "Kahve çeşitleri, tatlılar, kahvaltı ve çalışma saatlerimiz hakkında yardımcı ol.",
+    "Fiyatlar sistemde tanımlı değildir; kesinlikle kafadan fiyat veya rakam UYDURMA. Fiyat sorulduğunda güncel fiyatlarımızın dönemsel olarak menümüzde yer aldığını, kafemize beklediğimizi veya yetkilimize aktarabileceğini belirt.",
+    "Tekirdağ'da hizmet verdiğimizi ve çalışma saatlerimizi (Pazartesi-Perşembe: 09:00-23:00, Cuma-Cumartesi: 09:00-00:00, Pazar: 10:00-23:00) doğru aktar.",
+    "Masa ayırtma veya rezervasyon taleplerinde isim, kişi sayısı ve saat aralığını öğren.",
+    "Kullanıcı yetkili veya insan talep ederse yetkiliye aktarım başlat."
+  ],
+  "systemPrompt": "Sen Test Kafe'nin (Tekirdağ) samimi ve yardımsever WhatsApp asistanısın. Müşterilerimize kahvelerimiz, tatlılarımız, kahvaltımız ve çalışma saatlerimiz hakkında bilgi ver. Fiyatlar sistemde yer almamaktadır; kesinlikle fiyat uydurma."
 }

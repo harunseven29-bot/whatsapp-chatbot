@@ -57,6 +57,19 @@ function resolvePersistentAuthBase() {
 const RUNTIME_AUTH_BASE = resolveRuntimeAuthBase();
 const PERSISTENT_AUTH_BASE = resolvePersistentAuthBase();
 
+// Scoped message ID deduplication cache: key = `${clientId}:${msgId}` -> timestamp
+const processedMessageIds = new Map();
+const MESSAGE_DEDUPE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, ts] of processedMessageIds.entries()) {
+    if (now - ts > MESSAGE_DEDUPE_TTL_MS) {
+      processedMessageIds.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
 /**
  * Get runtime auth directory for a specific client
  */
@@ -429,6 +442,20 @@ async function startWhatsAppClient(clientId, isReconnect = false) {
 
           if (!userText || typeof userText !== 'string' || userText.trim().length === 0) {
             continue;
+          }
+
+          // Deduplicate incoming messages per client and message ID
+          const messageId = msg.key?.id;
+          if (messageId) {
+            const dedupeKey = `${clientId}:${messageId}`;
+            if (processedMessageIds.has(dedupeKey)) {
+              continue;
+            }
+            processedMessageIds.set(dedupeKey, Date.now());
+            if (processedMessageIds.size > 2000) {
+              const oldestKey = processedMessageIds.keys().next().value;
+              processedMessageIds.delete(oldestKey);
+            }
           }
 
           client.stats.messagesReceived += 1;

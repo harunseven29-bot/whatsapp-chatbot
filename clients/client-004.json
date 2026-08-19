@@ -1,34 +1,72 @@
 {
   "id": "client-004",
-  "enabled": false,
-  "businessName": "Örnek İşletme 4",
-  "category": "Hizmet Sektörü",
-  "description": "WhatsApp Müşteri Asistanı",
-  "phone": "",
-  "address": "",
-  "instagram": "",
+  "enabled": true,
+  "businessName": "North Barber Studio",
+  "category": "Erkek Kuaförü & Barber",
+  "description": "Tekirdağ Süleymanpaşa'da modern ve klasik erkek saç kesimi, sakal tasarımı, saç bakımı ve özel gün damat paketi hizmetleri sunan seçkin berber stüdyosu.",
+  "phone": "+90 555 400 40 04",
+  "address": "Süleymanpaşa, Tekirdağ",
+  "instagram": "@northbarberstudio",
   "website": "",
   "openingHours": {
-    "monday": "09:00-18:00",
-    "tuesday": "09:00-18:00",
-    "wednesday": "09:00-18:00",
-    "thursday": "09:00-18:00",
-    "friday": "09:00-18:00",
-    "saturday": "09:00-14:00",
-    "sunday": "Kapalı"
+    "monday": "10:00-21:00",
+    "tuesday": "10:00-21:00",
+    "wednesday": "10:00-21:00",
+    "thursday": "10:00-21:00",
+    "friday": "10:00-21:00",
+    "saturday": "10:00-22:00",
+    "sunday": "12:00-19:00"
   },
-  "services": [],
+  "services": [
+    {
+      "name": "Saç Kesimi",
+      "description": "Yüz ve saç yapısına uygun profesyonel erkek saç kesimi.",
+      "durationMinutes": 30,
+      "price": "500 TL"
+    },
+    {
+      "name": "Sakal Tasarımı",
+      "description": "Sakal şekillendirme, kontur ve bakım.",
+      "durationMinutes": 20,
+      "price": "300 TL"
+    },
+    {
+      "name": "Saç + Sakal",
+      "description": "Saç kesimi ve sakal tasarımı birlikte uygulanır.",
+      "durationMinutes": 45,
+      "price": "700 TL"
+    },
+    {
+      "name": "Saç Bakımı",
+      "description": "Saç tipine uygun bakım ve şekillendirme.",
+      "durationMinutes": 30,
+      "price": "400 TL"
+    },
+    {
+      "name": "Damat Paketi",
+      "description": "Saç, sakal ve özel gün hazırlık hizmeti.",
+      "durationMinutes": 90,
+      "price": "1.500 TL"
+    }
+  ],
   "prices": {
     "currency": "TRY",
-    "paymentMethods": "Kredi Kartı / Havale / Nakit",
+    "paymentMethods": "Kredi Kartı / Nakit",
     "depositRequired": false,
-    "cancellationPolicy": ""
+    "cancellationPolicy": "Randevunuza gelemeyeceğiniz durumlarda önceden haber vermeniz rica olunur."
   },
-  "faq": [],
-  "assistantInstructions": [
-    "Kısa ve doğal cevap ver.",
-    "Bilmediğin fiyatı uydurma.",
-    "Randevu talebinde kullanıcıdan uygun gün ve saat iste."
+  "faq": [
+    {
+      "question": "Randevusuz gelebilir miyim?",
+      "answer": "Yoğunluk durumuna göre randevusuz misafir kabul edebilmekteyiz; ancak bekleme yaşamamanız için randevu almanızı tavsiye ederiz."
+    }
   ],
-  "systemPrompt": "Sen bu işletmenin akıllı WhatsApp satış ve destek asistanısın."
+  "assistantInstructions": [
+    "Doğal, samimi ve saygılı bir dille WhatsApp üzerinden yanıt ver.",
+    "Müşteri randevu istediğinde tercih ettiği gün, saat ve istediği hizmeti sor.",
+    "Randevunun kesin onaylandığını söyleme; talebi not alıp stüdyo ekibinin teyit edeceğini belirt.",
+    "Fiyat, kampanya veya hizmet uydurma; yalnızca stüdyonun güncel fiyat listesine sadık kal.",
+    "Yetkili veya insan temsilci talep edilirse ustamıza/yetkilimize aktarım başlat."
+  ],
+  "systemPrompt": "Sen North Barber Studio'nun (Tekirdağ Süleymanpaşa) samimi ve profesyonel WhatsApp asistanısın. Saç kesimi, sakal tasarımı, saç bakımı ve damat paketi hizmetleri hakkında müşterilere bilgi ver ve randevu taleplerini al."
 }
