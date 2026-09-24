@@ -72,6 +72,26 @@ for (const id of ids) {
       await page.waitForTimeout(100);
       const p = await page.evaluate(() => window.__arcade.state());
       if (s.status === 'playing' && p.status !== 'paused' && p.status !== 'over') errors.push(`P did not pause (status "${p.status}")`);
+      if (p.status === 'paused') await page.keyboard.press('p');
+      // Soak: 5 s of random gameplay input.
+      const keys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyW', 'KeyS'];
+      const end = Date.now() + 5000;
+      while (Date.now() < end) {
+        const k = keys[Math.floor(Math.random() * keys.length)];
+        await page.keyboard.down(k); await page.waitForTimeout(40 + Math.random() * 160); await page.keyboard.up(k);
+      }
+      const after = await page.evaluate(() => window.__arcade.state());
+      if (typeof after.score !== 'number' || Number.isNaN(after.score)) errors.push(`score is not a number: ${after.score}`);
+    });
+    await check(pathToFileURL(file).href + '#demo', `${id} demo @ ${viewport.width}px`, viewport, async (page, errors) => {
+      await page.waitForTimeout(1200);
+      const s = await page.evaluate(() => window.__arcade && window.__arcade.state());
+      if (!s || s.status !== 'demo') errors.push(`demo status "${s && s.status}", expected "demo"`);
+      const a = await page.screenshot();
+      await page.waitForTimeout(700);
+      const b = await page.screenshot();
+      if (a.equals(b)) errors.push('demo canvas is not animating');
+      await page.waitForTimeout(2500);
     });
   }
 }

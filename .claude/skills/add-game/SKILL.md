@@ -6,7 +6,7 @@ description: Add a new single-file canvas game to Neon Arcade (games/<id>.html) 
 # Adding a game to Neon Arcade
 
 Every game is ONE self-contained HTML file in `games/<id>.html`: vanilla JS + `<canvas>`,
-no external scripts, fonts, images or network calls. Target size < 45 KB.
+no external scripts, fonts, images or network calls. Target size < 90 KB (racing/3D games < 120 KB).
 
 ## Contract (the launcher and the smoke test depend on this)
 
@@ -30,6 +30,32 @@ no external scripts, fonts, images or network calls. Target size < 45 KB.
    `status` is one of `ready | playing | paused | over`.
 9. **Juice:** particles, a little screen shake, short WebAudio beeps (create the
    `AudioContext` lazily on the first user gesture; honour mute).
+
+## v2 additions (required for every game)
+
+10. **Attract mode.** An AI autopilot that plays the game convincingly (not random input).
+    - On the `ready` screen the autopilot plays behind a dimmed overlay with the title and
+      "Başlamak için Boşluk'a bas ya da dokun". Starting the game resets to a fresh real game.
+    - **Demo mode:** if `location.hash === '#demo'`, the game only runs the autopilot, forever:
+      no overlay text except a small game title, no HUD clutter, no audio, no `localStorage`
+      writes, no `postMessage`, restarts itself shortly after the autopilot loses, ignores input.
+      `__arcade.state().status` is `'demo'`. The launcher shows these as live cabinet previews,
+      so it must look great at small sizes (~300×200) and stay cheap (particle caps, no huge
+      `shadowBlur`).
+11. **Music.** A procedural looping soundtrack via a WebAudio lookahead scheduler (setInterval
+    ~25 ms scheduling ~100 ms ahead), with a style fitting the game (bass + arpeggio + drums
+    from noise buffers). Plays while `playing`, ducks/stops while paused or over. `M` mutes
+    everything, `N` toggles music only. Master gain through a `DynamicsCompressor`.
+12. **Pause menu.** `P`/`Escape` or an on-screen ⏸ button opens a menu with clickable and
+    keyboard-navigable (↑/↓ + Enter/Space) items: `Devam`, `Yeniden Başla`, `Müzik: Açık/Kapalı`,
+    `Ses: Açık/Kapalı`. Esc/P again resumes.
+13. **Game-over screen** with stats (at least `Süre` plus 2–3 game-specific stats), the score
+    counting up, and a clear "Yeni Rekor!" celebration (confetti/particles) when beaten.
+14. **Feel.** Hit-stop / slow-mo on big moments, eased UI transitions, a subtle vignette +
+    scanline overlay pre-rendered once to an offscreen canvas. Stable 60 fps at 1280 px;
+    avoid per-frame allocations in hot loops and cap particle counts.
+15. **Hook extension.** `window.__arcade.state()` may return extra fields, but `status` and
+    `score` are mandatory. `window.__arcade.demo` is `true` in demo mode.
 
 ## Look & language
 
@@ -69,6 +95,7 @@ node tools/smoke.mjs            # all games
 node tools/smoke.mjs snake      # one game
 ```
 
-The smoke test loads each game in headless Chromium, fails on any console error or page error,
-checks `window.__arcade`, presses Space, holds keys for a while and asserts status becomes
-`playing`. A game is not done until it passes.
+The smoke test loads each game in headless Chromium at 1280 px and 360 px, fails on any console
+error or page error, checks `window.__arcade`, presses Space, holds keys and asserts status becomes
+`playing`, checks that `P` pauses, then runs a 5 s soak of random input. It also loads `#demo` and
+asserts status `demo` and that the canvas keeps changing. A game is not done until it passes.
