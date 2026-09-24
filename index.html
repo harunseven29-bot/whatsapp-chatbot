@@ -27,6 +27,7 @@
     --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; }
   body {
     margin: 0;
@@ -180,6 +181,7 @@
     box-shadow: 0 0 30px -4px var(--amber);
   }
 
+  @media (max-width: 520px) { .cab { min-height: 0; } }
   @media (prefers-reduced-motion: reduce) {
     h1 .tube { animation: none; }
     .cab, .coin { transition: none; }
@@ -211,7 +213,7 @@
     <h2 id="screen-title"></h2>
     <span class="best" id="screen-best"></span>
   </div>
-  <iframe id="frame" title="Oyun" allow="autoplay"></iframe>
+  <iframe id="frame" title="Oyun"></iframe>
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>

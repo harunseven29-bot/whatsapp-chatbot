@@ -21,14 +21,17 @@ const ids = process.argv.slice(2).length
   ? process.argv.slice(2)
   : readdirSync(gamesDir).filter((f) => f.endsWith('.html')).map((f) => f.replace(/\.html$/, ''));
 
-const launchOpts = existsSync('/opt/pw-browsers/chromium') ? {} : {};
-const browser = await chromium.launch(launchOpts);
+const browser = await chromium.launch();
 let failed = 0;
 
 async function check(url, label, viewport, fn) {
   const page = await browser.newPage({ viewport });
   const errors = [];
-  page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
+  page.on('console', (m) => {
+    // Remote resources (web fonts) may be unreachable offline; only local failures count.
+    if (m.type() !== 'error' || /^https?:/.test(m.location().url || '')) return;
+    errors.push(`console: ${m.text()}`);
+  });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   try {
     await page.goto(url);
