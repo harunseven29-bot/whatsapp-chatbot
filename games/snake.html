@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Yılan</title>
+<style>
+  :root { --bg:#0b0f1a; --panel:#121829; --grid:#1c2440; --text:#e6ecff; --muted:#8a94b8; --lime:#a3e635; }
+  html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); }
+  body { display:flex; flex-direction:column; align-items:center; justify-content:center; touch-action:none;
+    -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; font-family:system-ui, sans-serif; }
+  canvas { display:block; touch-action:none; }
+  #pad { display:none; width:156px; height:156px; position:relative; margin-top:10px; flex:0 0 auto; }
+  #pad button { position:absolute; width:52px; height:52px; border-radius:14px; border:1px solid #2a3560;
+    background:var(--panel); color:var(--lime); font-size:22px; line-height:1; padding:0; touch-action:none;
+    box-shadow:0 0 10px rgba(163,230,53,.12) inset; }
+  #pad button:active, #pad button.on { background:#1d2a14; border-color:var(--lime); }
+  #pad [data-d="up"] { left:52px; top:0; }
+  #pad [data-d="left"] { left:0; top:52px; }
+  #pad [data-d="right"] { left:104px; top:52px; }
+  #pad [data-d="down"] { left:52px; top:104px; }
+  body.touch #pad { display:block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="pad" aria-label="Yön tuşları">
+  <button data-d="up" aria-label="Yukarı">▲</button>
+  <button data-d="left" aria-label="Sol">◀</button>
+  <button data-d="right" aria-label="Sağ">▶</button>
+  <button data-d="down" aria-label="Aşağı">▼</button>
+</div>
+<script>
+(() => {
+'use strict';
+const ID = 'snake';
+const C = { bg:'#0b0f1a', panel:'#121829', grid:'#1c2440', text:'#e6ecff', muted:'#8a94b8', cyan:'#22d3ee',
+  magenta:'#f472b6', lime:'#a3e635', amber:'#fbbf24', violet:'#a78bfa' };
+const COLS = 20, ROWS = 20, CELL = 24, HUD = 64;
+const W = COLS * CELL, H = ROWS * CELL + HUD;
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace', SANS = 'system-ui, sans-serif';
+const DIRS = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0] };
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const pad = document.getElementById('pad');
+
+// ---------- storage ----------
+let memBest = 0;
+function loadBest() { try { const v = parseInt(localStorage.getItem('arcade:' + ID + ':best'), 10); return isFinite(v) ? v : memBest; } catch (e) { return memBest; } }
+function saveBest(v) { memBest = v; try { localStorage.setItem('arcade:' + ID + ':best', String(v)); } catch (e) {} }
+
+// ---------- audio ----------
+let ac = null, muted = false;
+function ensureAudio() {
+  if (ac) { if (ac.state === 'suspended') ac.resume().catch(() => {}); return; }
+  try { const A = window.AudioContext || window.webkitAudioContext; if (A) ac = new A(); } catch (e) { ac = null; }
+}
+function beep(freq, dur, type, vol, slide) {
+  if (muted || !ac) return;
+  try {
+    const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t + dur);
+    g.gain.setValueAtTime(vol || 0.06, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+const sfx = {
+  eat() { beep(520, 0.08, 'square', 0.05, 1.6); },
+  bonus() { beep(660, 0.09, 'triangle', 0.07, 1.5); setTimeout(() => beep(990, 0.12, 'triangle', 0.06, 1.3), 70); },
+  turn() { beep(220, 0.025, 'sine', 0.025); },
+  level() { [440, 554, 659, 880].forEach((f, i) => setTimeout(() => beep(f, 0.09, 'square', 0.045), i * 70)); },
+  die() { beep(300, 0.5, 'sawtooth', 0.07, 0.15); },
+  start() { beep(330, 0.07, 'square', 0.04, 2); },
+  appear() { beep(880, 0.05, 'sine', 0.035, 1.2); }
+};
+
+// ---------- layout ----------
+let scale = 1;
+function isTouchish() {
+  let coarse = false;
+  try { coarse = matchMedia('(pointer: coarse)').matches; } catch (e) {}
+  return coarse || innerWidth < 600;
+}
+function resize() {
+  const touch = isTouchish();
+  document.body.classList.toggle('touch', touch);
+  const padH = touch ? 166 : 0;
+  const aw = innerWidth - 8, ah = innerHeight - padH - 8;
+  scale = Math.max(0.2, Math.min(aw / W, ah / H));
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  cv.style.width = Math.floor(W * scale) + 'px';
+  cv.style.height = Math.floor(H * scale) + 'px';
+  cv.width = Math.round(W * scale * dpr);
+  cv.height = Math.round(H * scale * dpr);
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  bgCache = null;
+}
+addEventListener('resize', resize);
+
+// ---------- state ----------
+let status = 'ready';
+let snake, prev, dir, queue, grow, food, bonus, score, best = loadBest(), level, eaten;
+let tickT, interval, particles = [], popups = [], shake = 0, flash = 0, overT = 0, levelToast = 0;
+let newBest = false, time = 0, deathCause = '', bonusCooldown = 0, pulse = 0;
+
+function reset() {
+  const cy = Math.floor(ROWS / 2);
+  snake = [{ x:6, y:cy }, { x:5, y:cy }, { x:4, y:cy }];
+  prev = snake.map(s => ({ x:s.x, y:s.y }));
+  dir = 'right'; queue = []; grow = 0;
+  score = 0; level = 1; eaten = 0; tickT = 0;
+  interval = speedFor(snake.length);
+  bonus = null; bonusCooldown = 8 + Math.random() * 6;
+  particles = []; popups = []; newBest = false; levelToast = 0; flash = 0;
+  food = freeCell();
+}
+function speedFor(len) {
+  // gentle acceleration: 150ms -> 62ms floor
+  return Math.max(0.062, 0.15 - (len - 3) * 0.0026 - (level - 1) * 0.004);
+}
+function occupied(x, y) {
+  for (const s of snake) if (s.x === x && s.y === y) return true;
+  return false;
+}
+function freeCell() {
+  const free = [];
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    if (occupied(x, y)) continue;
+    if (food && food.x === x && food.y === y) continue;
+    if (bonus && bonus.x === x && bonus.y === y) continue;
+    free.push({ x, y });
+  }
+  if (!free.length) return null;
+  const c = free[(Math.random() * free.length) | 0];
+  c.born = time;
+  return c;
+}
+
+function start() {
+  ensureAudio();
+  reset();
+  status = 'playing';
+  sfx.start();
+}
+function setPaused(p) {
+  if (p && status === 'playing') status = 'paused';
+  else if (!p && status === 'paused') { status = 'playing'; ensureAudio(); }
+}
+function gameOver(cause) {
+  status = 'over'; overT = 0; deathCause = cause;
+  shake = 14; flash = 1;
+  sfx.die();
+  const h = snake[0];
+  burst(h.x, h.y, C.lime, 30, 220);
+  burst(h.x, h.y, C.magenta, 16, 160);
+  if (score > best) { best = score; newBest = score > 0; saveBest(best); }
+  try { parent.postMessage({ type:'arcade-score', game:ID, score }, '*'); } catch (e) {}
+}
+
+// ---------- input ----------
+function pushDir(d) {
+  if (status === 'ready' || status === 'over') { action(); if (status !== 'playing') return; }
+  if (status !== 'playing') return;
+  const last = queue.length ? queue[queue.length - 1] : dir;
+  if (d === last) return;
+  const a = DIRS[d], b = DIRS[last];
+  if (a[0] === -b[0] && a[1] === -b[1]) return; // 180° reversal
+  if (queue.length < 3) queue.push(d);
+}
+function action() {
+  ensureAudio();
+  if (status === 'ready') start();
+  else if (status === 'over') { if (overT > 0.45) start(); }
+  else if (status === 'paused') setPaused(false);
+}
+const KEYMAP = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', KeyW:'up', KeyS:'down', KeyA:'left', KeyD:'right' };
+addEventListener('keydown', e => {
+  const code = e.code || '';
+  const k = e.key;
+  let d = KEYMAP[code];
+  if (!d) d = ({ w:'up', s:'down', a:'left', d:'right', W:'up', S:'down', A:'left', D:'right' })[k];
+  if (k && k.startsWith('Arrow')) e.preventDefault();
+  if (d) { e.preventDefault(); if (status === 'playing' || !e.repeat) pushDir(d); return; }
+  if (code === 'Space' || k === ' ') { e.preventDefault(); if (!e.repeat) action(); return; }
+  if (code === 'KeyP' || k === 'p' || k === 'P') { if (status === 'playing') setPaused(true); else if (status === 'paused') setPaused(false); return; }
+  if (code === 'KeyM' || k === 'm' || k === 'M') { muted = !muted; if (!muted) { ensureAudio(); beep(660, 0.05, 'sine', 0.04); } }
+});
+
+// swipe on canvas
+let sw = null;
+cv.addEventListener('pointerdown', e => {
+  ensureAudio();
+  sw = { x:e.clientX, y:e.clientY, moved:false, id:e.pointerId };
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+});
+cv.addEventListener('pointermove', e => {
+  if (!sw || e.pointerId !== sw.id) return;
+  const dx = e.clientX - sw.x, dy = e.clientY - sw.y;
+  const th = Math.max(18, 22 * Math.min(1, scale));
+  if (Math.abs(dx) < th && Math.abs(dy) < th) return;
+  sw.moved = true;
+  if (status === 'playing') pushDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  sw.x = e.clientX; sw.y = e.clientY;
+});
+function endSwipe(e) {
+  if (!sw || e.pointerId !== sw.id) return;
+  if (!sw.moved) {
+    // tap: HUD pause button, or start/restart/resume
+    const r = cv.getBoundingClientRect();
+    const lx = (e.clientX - r.left) / scale, ly = (e.clientY - r.top) / scale;
+    if (status === 'playing' && ly < HUD && lx > W - 56) setPaused(true);
+    else if (status !== 'playing') action();
+  }
+  sw = null;
+}
+cv.addEventListener('pointerup', endSwipe);
+cv.addEventListener('pointercancel', () => { sw = null; });
+
+pad.querySelectorAll('button').forEach(b => {
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    ensureAudio();
+    b.classList.add('on');
+    pushDir(b.dataset.d);
+  });
+  const off = () => b.classList.remove('on');
+  b.addEventListener('pointerup', off); b.addEventListener('pointerleave', off); b.addEventListener('pointercancel', off);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
+
+document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
+
+// ---------- simulation ----------
+function step() {
+  prev = snake.map(s => ({ x:s.x, y:s.y }));
+  if (queue.length) { const nd = queue.shift(); if (nd !== dir) sfx.turn(); dir = nd; }
+  const v = DIRS[dir], h = snake[0];
+  const nx = h.x + v[0], ny = h.y + v[1];
+  if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) { prev = snake.map(s => ({ x:s.x, y:s.y })); gameOver('wall'); return; }
+  const tailMoves = grow === 0;
+  for (let i = 0; i < snake.length - (tailMoves ? 1 : 0); i++) {
+    if (snake[i].x === nx && snake[i].y === ny) { prev = snake.map(s => ({ x:s.x, y:s.y })); gameOver('self'); return; }
+  }
+  snake.unshift({ x:nx, y:ny });
+  if (grow > 0) { grow--; prev.push({ ...prev[prev.length - 1] }); }
+  else snake.pop();
+
+  if (food && nx === food.x && ny === food.y) {
+    eaten++;
+    const pts = 10 * level;
+    addScore(pts, nx, ny, C.amber);
+    grow += 1;
+    sfx.eat();
+    burst(nx, ny, C.amber, 16, 140);
+    shake = Math.max(shake, 3);
+    food = null; food = freeCell();
+    const nl = 1 + Math.floor(eaten / 5);
+    if (nl > level) { level = nl; levelToast = 1.6; sfx.level(); burst(nx, ny, C.violet, 24, 200); }
+    if (!bonus && bonusCooldown < 3 && Math.random() < 0.35) bonusCooldown = 0.2;
+  }
+  if (bonus && nx === bonus.x && ny === bonus.y) {
+    const frac = Math.max(0, bonus.life / bonus.max);
+    const pts = Math.round((30 + 70 * frac) * level / 5) * 5;
+    addScore(pts, nx, ny, C.magenta);
+    grow += 2;
+    sfx.bonus();
+    burst(nx, ny, C.magenta, 28, 200);
+    burst(nx, ny, C.text, 8, 120);
+    shake = Math.max(shake, 6);
+    bonus = null; bonusCooldown = 10 + Math.random() * 8;
+  }
+  if (!food) food = freeCell();
+  interval = speedFor(snake.length);
+}
+function addScore(pts, x, y, col) {
+  score += pts;
+  popups.push({ x:(x + 0.5) * CELL, y:HUD + (y + 0.5) * CELL, t:0, text:'+' + pts, col });
+}
+function burst(cx, cy, col, n, spd) {
+  const px = (cx + 0.5) * CELL, py = HUD + (cy + 0.5) * CELL;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = spd * (0.3 + Math.random() * 0.7);
+    particles.push({ x:px, y:py, vx:Math.cos(a) * s, vy:Math.sin(a) * s, life:0.4 + Math.random() * 0.5, t:0, col, r:1.5 + Math.random() * 2.2 });
+  }
+  if (particles.length > 400) particles.splice(0, particles.length - 400);
+}
+
+function update(dt) {
+  time += dt;
+  pulse += dt;
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.t += dt; if (p.t >= p.life) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 1 - 3 * dt; p.vy *= 1 - 3 * dt;
+  }
+  for (let i = popups.length - 1; i >= 0; i--) { popups[i].t += dt; if (popups[i].t > 0.9) popups.splice(i, 1); }
+  shake = Math.max(0, shake - dt * 40);
+  flash = Math.max(0, flash - dt * 2.5);
+  if (status === 'over') overT += dt;
+  if (status !== 'playing') return;
+  levelToast = Math.max(0, levelToast - dt);
+  if (bonus) {
+    bonus.life -= dt;
+    if (bonus.life <= 0) { burst(bonus.x, bonus.y, C.muted, 8, 80); bonus = null; bonusCooldown = 9 + Math.random() * 8; }
+  } else {
+    bonusCooldown -= dt;
+    if (bonusCooldown <= 0) {
+      const c = freeCell();
+      if (c) { const mx = Math.max(4.5, 7 - level * 0.2); bonus = { x:c.x, y:c.y, life:mx, max:mx, born:time }; sfx.appear(); }
+      else bonusCooldown = 3;
+    }
+  }
+  tickT += dt;
+  while (status === 'playing' && tickT >= interval) { tickT -= interval; step(); }
+}
+
+// ---------- render ----------
+let bgCache = null;
+function buildBg() {
+  const dpr = cv.width / W;
+  const c = document.createElement('canvas');
+  c.width = cv.width; c.height = cv.height;
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.fillStyle = C.bg; g.fillRect(0, 0, W, H);
+  g.fillStyle = C.panel; g.fillRect(0, 0, W, HUD);
+  g.strokeStyle = C.grid; g.lineWidth = 1;
+  g.beginPath();
+  for (let x = 1; x < COLS; x++) { g.moveTo(x * CELL + 0.5, HUD); g.lineTo(x * CELL + 0.5, H); }
+  for (let y = 1; y < ROWS; y++) { g.moveTo(0, HUD + y * CELL + 0.5); g.lineTo(W, HUD + y * CELL + 0.5); }
+  g.globalAlpha = 0.55; g.stroke(); g.globalAlpha = 1;
+  g.fillStyle = '#26315a';
+  for (let y = 1; y < ROWS; y++) for (let x = 1; x < COLS; x++) g.fillRect(x * CELL - 1, HUD + y * CELL - 1, 2, 2);
+  // wall frame
+  g.strokeStyle = 'rgba(34,211,238,.55)'; g.lineWidth = 2;
+  g.strokeRect(1, HUD + 1, W - 2, H - HUD - 2);
+  bgCache = c;
+}
+function lerp(a, b, t) { return a + (b - a) * t; }
+function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+function mixColor(t) {
+  // head lime (#a3e635) -> tail deep green/teal (#1f7a4a)
+  const r = Math.round(lerp(163, 31, t)), g = Math.round(lerp(230, 122, t)), b = Math.round(lerp(53, 74, t));
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+function segPoints(t) {
+  const pts = [];
+  for (let i = 0; i < snake.length; i++) {
+    const a = prev[i] || snake[i], b = snake[i];
+    pts.push({ x:(lerp(a.x, b.x, t) + 0.5) * CELL, y:HUD + (lerp(a.y, b.y, t) + 0.5) * CELL });
+  }
+  return pts;
+}
+function drawSnake(t) {
+  const pts = segPoints(t);
+  const n = pts.length;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // soft glow underlay
+  ctx.save();
+  ctx.globalAlpha = status === 'over' ? 0.12 : 0.18;
+  ctx.strokeStyle = C.lime; ctx.lineWidth = CELL * 1.05;
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < n; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+  ctx.restore();
+  // body gradient segments (tail first so head draws on top)
+  for (let i = n - 1; i >= 1; i--) {
+    const k = i / Math.max(1, n - 1);
+    ctx.strokeStyle = status === 'over' && flash > 0 && (Math.floor(time * 20) % 2) ? '#ffffff' : mixColor(k);
+    ctx.lineWidth = CELL * lerp(0.74, 0.46, k);
+    ctx.beginPath(); ctx.moveTo(pts[i].x, pts[i].y); ctx.lineTo(pts[i - 1].x, pts[i - 1].y); ctx.stroke();
+  }
+  // scale highlights
+  ctx.fillStyle = 'rgba(230,236,255,.18)';
+  for (let i = 1; i < n; i += 2) {
+    const k = i / Math.max(1, n - 1);
+    ctx.beginPath(); ctx.arc(pts[i].x - 2, pts[i].y - 2, CELL * lerp(0.12, 0.06, k), 0, Math.PI * 2); ctx.fill();
+  }
+  // head
+  const h = pts[0], v = DIRS[dir];
+  ctx.save();
+  ctx.shadowColor = C.lime; ctx.shadowBlur = 16;
+  ctx.fillStyle = '#c4f56a';
+  ctx.beginPath(); ctx.arc(h.x, h.y, CELL * 0.44, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // eyes
+  const px = -v[1], py = v[0];
+  for (const s of [-1, 1]) {
+    const ex = h.x + v[0] * 4 + px * 5 * s, ey = h.y + v[1] * 4 + py * 5 * s;
+    ctx.fillStyle = C.bg; ctx.beginPath(); ctx.arc(ex, ey, 3.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = status === 'over' ? C.magenta : '#ffffff';
+    ctx.beginPath(); ctx.arc(ex + v[0] * 1.2, ey + v[1] * 1.2, 1.3, 0, Math.PI * 2); ctx.fill();
+  }
+}
+function drawFood() {
+  if (food) {
+    const cx = (food.x + 0.5) * CELL, cy = HUD + (food.y + 0.5) * CELL;
+    const age = time - (food.born || 0);
+    const pop = age < 0.35 ? ease(Math.min(1, age / 0.35)) * (1 + 0.25 * Math.sin(age / 0.35 * Math.PI)) : 1;
+    const r = CELL * 0.3 * pop * (1 + 0.06 * Math.sin(pulse * 6));
+    ctx.save();
+    ctx.shadowColor = C.amber; ctx.shadowBlur = 14;
+    ctx.fillStyle = C.amber;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(255,255,255,.55)';
+    ctx.beginPath(); ctx.arc(cx - r * 0.35, cy - r * 0.35, r * 0.28, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = C.lime; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy - r); ctx.quadraticCurveTo(cx + 3, cy - r - 5, cx + 6, cy - r - 4); ctx.stroke();
+  }
+  if (bonus) {
+    const cx = (bonus.x + 0.5) * CELL, cy = HUD + (bonus.y + 0.5) * CELL;
+    const frac = Math.max(0, bonus.life / bonus.max);
+    const age = time - bonus.born;
+    const pop = age < 0.3 ? ease(age / 0.3) : 1;
+    const blink = frac < 0.3 && Math.floor(time * 10) % 2 === 0 ? 0.45 : 1;
+    ctx.save();
+    ctx.globalAlpha = blink;
+    // countdown ring
+    ctx.strokeStyle = 'rgba(244,114,182,.22)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.62, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = C.magenta;
+    ctx.beginPath(); ctx.arc(cx, cy, CELL * 0.62, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac); ctx.stroke();
+    // gem
+    const r = CELL * 0.34 * pop, rot = time * 2;
+    ctx.shadowColor = C.magenta; ctx.shadowBlur = 16;
+    ctx.fillStyle = C.magenta;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = rot + i * Math.PI / 5, rr = i % 2 ? r * 0.5 : r;
+      ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+function txt(s, x, y, size, col, font, align) {
+  ctx.font = (font === SANS ? '600 ' : '700 ') + size + 'px ' + (font || MONO);
+  ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = col; ctx.fillText(s, x, y);
+}
+function drawHud() {
+  txt('Skor', 16, 20, 12, C.muted, SANS, 'left');
+  txt(String(score), 16, 43, 22, C.amber, MONO, 'left');
+  txt('En Yüksek', 150, 20, 12, C.muted, SANS, 'left');
+  txt(String(Math.max(best, score)), 150, 43, 22, C.text, MONO, 'left');
+  txt('Seviye', 300, 20, 12, C.muted, SANS, 'left');
+  txt(String(level), 300, 43, 22, C.lime, MONO, 'left');
+  // level progress pips
+  const into = eaten % 5;
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = i < into ? C.lime : C.grid;
+    ctx.fillRect(330 + i * 12, 38, 8, 10);
+  }
+  // pause button / mute indicator
+  ctx.fillStyle = C.muted;
+  if (status === 'playing') { ctx.fillRect(W - 34, 22, 6, 20); ctx.fillRect(W - 23, 22, 6, 20); }
+  if (muted) txt('M̶', W - 60, 32, 12, C.muted, MONO);
+}
+function overlay(title, sub, col, extra) {
+  ctx.fillStyle = 'rgba(11,15,26,.72)';
+  ctx.fillRect(0, HUD, W, H - HUD);
+  const bw = 380, bh = extra ? 200 : 150, bx = (W - bw) / 2, by = HUD + (H - HUD - bh) / 2;
+  ctx.fillStyle = C.panel;
+  roundRect(bx, by, bw, bh, 16); ctx.fill();
+  ctx.strokeStyle = col; ctx.globalAlpha = 0.6; ctx.lineWidth = 1.5; roundRect(bx, by, bw, bh, 16); ctx.stroke(); ctx.globalAlpha = 1;
+  txt(title, W / 2, by + 44, 34, col, SANS);
+  if (extra) extra(by);
+  const a = 0.6 + 0.4 * Math.sin(time * 4);
+  ctx.globalAlpha = a;
+  txt(sub, W / 2, by + bh - 34, 15, C.text, SANS);
+  ctx.globalAlpha = 1;
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function render() {
+  if (!bgCache) buildBg();
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(bgCache, 0, 0);
+  ctx.restore();
+  drawHud();
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+  ctx.beginPath(); ctx.rect(0, HUD, W, H - HUD); ctx.clip();
+  drawFood();
+  const t = status === 'playing' ? Math.min(1, tickT / interval) : (status === 'paused' ? Math.min(1, tickT / interval) : 1);
+  drawSnake(t);
+  // particles
+  for (const p of particles) {
+    ctx.globalAlpha = 1 - p.t / p.life;
+    ctx.fillStyle = p.col;
+    ctx.fillRect(p.x - p.r / 2, p.y - p.r / 2, p.r, p.r);
+  }
+  ctx.globalAlpha = 1;
+  for (const p of popups) {
+    ctx.globalAlpha = 1 - p.t / 0.9;
+    txt(p.text, p.x, p.y - 12 - p.t * 30, 16, p.col, MONO);
+  }
+  ctx.globalAlpha = 1;
+  if (flash > 0) { ctx.fillStyle = 'rgba(244,114,182,' + (flash * 0.25) + ')'; ctx.fillRect(0, HUD, W, H - HUD); }
+  ctx.restore();
+
+  if (levelToast > 0 && status === 'playing') {
+    const a = Math.min(1, levelToast * 2);
+    ctx.globalAlpha = a;
+    txt('Seviye ' + level, W / 2, HUD + 60 - (1.6 - levelToast) * 8, 28, C.violet, SANS);
+    ctx.globalAlpha = 1;
+  }
+
+  if (status === 'ready') {
+    overlay('Yılan', "Başlamak için Boşluk'a bas ya da dokun", C.lime, by => {
+      txt('Oklar / WASD · kaydır', W / 2, by + 88, 14, C.muted, SANS);
+      txt('● yem +10   ✦ bonus', W / 2, by + 114, 14, C.amber, SANS);
+      txt('P: duraklat · M: ses', W / 2, by + 138, 13, C.muted, SANS);
+    });
+  } else if (status === 'paused') {
+    overlay('Duraklatıldı', 'Devam için P / Boşluk / dokun', C.cyan);
+  } else if (status === 'over' && overT > 0.35) {
+    overlay('Oyun Bitti', 'Tekrar için Boşluk / dokun', C.magenta, by => {
+      txt(deathCause === 'wall' ? 'Duvara çarptın' : 'Kendini ısırdın', W / 2, by + 84, 14, C.muted, SANS);
+      txt('Skor ' + score, W / 2, by + 118, 26, C.amber, MONO);
+      if (newBest) txt('Yeni rekor!', W / 2, by + 146, 14, C.lime, SANS);
+    });
+  }
+}
+
+// ---------- loop ----------
+const STEP = 1 / 120;
+let last = performance.now(), acc = 0;
+function frame(now) {
+  let d = (now - last) / 1000; last = now;
+  if (!(d > 0)) d = 0;
+  if (d > 0.25) d = 0.25;
+  acc += d;
+  let n = 0;
+  while (acc >= STEP && n < 60) { update(STEP); acc -= STEP; n++; }
+  render();
+  requestAnimationFrame(frame);
+}
+
+window.__arcade = { id: ID, state: () => ({ status, score }) };
+reset();
+resize();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

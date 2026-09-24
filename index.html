@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- publish:start -->
+<title>Neon Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tilt+Neon&family=Chakra+Petch:wght@400;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0f1a;
+    --panel: #121829;
+    --panel-2: #0f1424;
+    --grid: #1c2440;
+    --text: #e6ecff;
+    --muted: #8a94b8;
+    --cyan: #22d3ee;
+    --magenta: #f472b6;
+    --lime: #a3e635;
+    --amber: #fbbf24;
+    --violet: #a78bfa;
+    --display: 'Tilt Neon', 'Trebuchet MS', system-ui, sans-serif;
+    --body: 'Chakra Petch', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, #1a2350 0%, transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font: 16px/1.55 var(--body);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding-inline: 16px;
+    padding-block: 40px 56px;
+    display: grid;
+    gap: 40px;
+  }
+
+  /* Tabela */
+  header { display: grid; gap: 14px; justify-items: start; }
+  .eyebrow {
+    font: 600 12px/1 var(--mono);
+    letter-spacing: .22em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  h1 {
+    margin: 0;
+    font: 400 clamp(52px, 11vw, 112px)/.95 var(--display);
+    letter-spacing: .01em;
+    color: #fdf2ff;
+    text-shadow:
+      0 0 2px #fff,
+      0 0 10px var(--magenta),
+      0 0 28px var(--magenta),
+      0 0 60px #be185d;
+    text-wrap: balance;
+  }
+  h1 .tube {
+    color: #ecfeff;
+    text-shadow: 0 0 2px #fff, 0 0 10px var(--cyan), 0 0 28px var(--cyan), 0 0 60px #0e7490;
+    animation: flicker 3.2s linear 1 both;
+  }
+  @keyframes flicker {
+    0%, 8%, 12%, 20%, 23% { opacity: .25; text-shadow: none; }
+    10%, 21%, 26%, 100% { opacity: 1; }
+  }
+  .lede { margin: 0; max-width: 58ch; color: var(--muted); font-size: 17px; }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  /* Kabinler */
+  .cabinets {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+  }
+  .cab {
+    --c: var(--cyan);
+    position: relative;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 14px;
+    padding: 18px 18px 16px;
+    min-height: 250px;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
+    border: 1px solid var(--grid);
+    border-top: 3px solid var(--c);
+    border-radius: 6px 6px 14px 14px;
+    cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  }
+  .cab:hover, .cab:focus-visible {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--c) 55%, var(--grid));
+    box-shadow: 0 0 0 1px var(--c), 0 14px 40px -12px var(--c);
+    outline: none;
+  }
+  .cab .marquee { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .cab h2 {
+    margin: 0;
+    font: 400 30px/1.05 var(--display);
+    color: var(--c);
+    text-shadow: 0 0 14px color-mix(in srgb, var(--c) 60%, transparent);
+  }
+  .cab .slot { font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: .12em; }
+  .cab p { margin: 0; color: var(--muted); font-size: 15px; }
+  .cab .foot {
+    display: flex; justify-content: space-between; align-items: end; gap: 10px;
+    padding-top: 12px; border-top: 1px dashed var(--grid);
+  }
+  .stat { display: grid; gap: 4px; }
+  .stat span { font: 500 10px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  .stat b { font: 700 22px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--amber); }
+  .keys { font: 500 12px/1.3 var(--mono); color: var(--muted); text-align: right; }
+  .coin {
+    position: absolute; right: 14px; bottom: -11px;
+    padding: 4px 10px;
+    font: 700 11px/1 var(--mono); letter-spacing: .14em;
+    color: var(--bg); background: var(--c);
+    border-radius: 999px;
+    opacity: 0; transform: translateY(4px);
+    transition: opacity .18s, transform .18s;
+  }
+  .cab:hover .coin, .cab:focus-visible .coin { opacity: 1; transform: none; }
+
+  .notes {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 32px;
+    color: var(--muted); font-size: 14px;
+  }
+  .notes h3 { margin: 0 0 4px; font: 600 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--text); }
+  .notes p { margin: 0; }
+  kbd {
+    font: 500 12px/1 var(--mono); padding: 2px 6px; border-radius: 4px;
+    border: 1px solid var(--grid); border-bottom-width: 2px; color: var(--text); background: var(--panel);
+  }
+
+  /* Ekran */
+  .screen {
+    position: fixed; inset: 0; z-index: 10;
+    display: grid; grid-template-rows: auto 1fr;
+    background: var(--bg);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .screen .bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--grid);
+    background: var(--panel);
+  }
+  .screen .bar h2 { margin: 0; font: 400 22px/1 var(--display); color: var(--c, var(--cyan)); flex: 1; min-width: 0; }
+  .btn {
+    font: 600 14px/1 var(--body); color: var(--text);
+    padding: 9px 14px; border-radius: 8px;
+    background: var(--panel-2); border: 1px solid var(--grid); cursor: pointer;
+  }
+  .btn:hover, .btn:focus-visible { border-color: var(--cyan); outline: none; }
+  .screen .best { font: 700 14px/1 var(--mono); color: var(--amber); font-variant-numeric: tabular-nums; }
+  .screen iframe { width: 100%; height: 100%; border: 0; display: block; background: var(--bg); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+    transform: translateX(-50%);
+    padding: 10px 18px; border-radius: 999px;
+    font: 700 14px/1 var(--mono); letter-spacing: .06em;
+    color: var(--bg); background: var(--amber);
+    box-shadow: 0 0 30px -4px var(--amber);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    h1 .tube { animation: none; }
+    .cab, .coin { transition: none; }
+  }
+</style>
+<!-- publish:end -->
+</head>
+<body>
+<!-- body:start -->
+<div class="wrap">
+  <header>
+    <div class="eyebrow">4 oyun · jeton gerekmez</div>
+    <h1>Neon <span class="tube">Arcade</span></h1>
+    <p class="lede">Tarayıcıda çalışan dört klasik salon oyunu. Her biri tek bir HTML dosyası; kurulum yok, bağımlılık yok. <b>Klavyeyle ya da dokunarak</b> oyna, rekorların bu cihazda saklanır.</p>
+  </header>
+
+  <main class="cabinets" id="cabinets" aria-label="Oyunlar"></main>
+
+  <section class="notes" aria-label="Kontroller">
+    <div><h3>Başla</h3><p><kbd>Boşluk</kbd> ya da ekrana dokun.</p></div>
+    <div><h3>Duraklat · Ses</h3><p><kbd>P</kbd> duraklatır, <kbd>M</kbd> sesi kapatır.</p></div>
+    <div><h3>Hareket</h3><p>Ok tuşları ya da <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Telefonda ekrandaki tuşlar çıkar.</p></div>
+  </section>
+</div>
+
+<div class="screen" id="screen" hidden>
+  <div class="bar">
+    <button class="btn" id="back" type="button">← Salona dön</button>
+    <h2 id="screen-title"></h2>
+    <span class="best" id="screen-best"></span>
+  </div>
+  <iframe id="frame" title="Oyun" allow="autoplay"></iframe>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+  const GAMES = [
+    { id: 'snake', title: 'Yılan', blurb: 'Yemleri topla, uza, hızlan. Macenta bonus meyve kaybolmadan yakala.', color: 'var(--lime)', keys: 'Oklar / WASD' },
+    { id: 'breakout', title: 'Tuğla Kırıcı', blurb: 'Raketi kaydır, tuğlaları dağıt. Düşen güçlendirmeler topu çoğaltır, raketi büyütür.', color: 'var(--cyan)', keys: '← → / fare' },
+    { id: 'asteroids', title: 'Asteroit', blurb: 'Ataletle süzül, kayaları parçala. Büyükler bölünür, dalgalar sertleşir.', color: 'var(--magenta)', keys: 'Oklar + Boşluk' },
+    { id: 'blocks', title: 'Blok Yağmuru', blurb: 'Düşen parçaları döndür, satırları temizle. Hayalet parça ve saklama var.', color: 'var(--violet)', keys: 'Oklar · Z X C' },
+  ];
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  };
+  const best = (id) => Number(store.get(`arcade:${id}:best`)) || 0;
+  const fmt = (n) => n.toLocaleString('tr-TR');
+
+  const cabinets = document.getElementById('cabinets');
+  const screen = document.getElementById('screen');
+  const frame = document.getElementById('frame');
+  const toast = document.getElementById('toast');
+  let current = null;
+
+  function render() {
+    cabinets.innerHTML = '';
+    GAMES.forEach((g, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cab';
+      b.dataset.game = g.id;
+      b.style.setProperty('--c', g.color);
+      b.innerHTML = `
+        <div class="marquee"><h2>${g.title}</h2><span class="slot">${String(i + 1).padStart(2, '0')}/${String(GAMES.length).padStart(2, '0')}</span></div>
+        <p>${g.blurb}</p>
+        <div class="foot">
+          <div class="stat"><span>En Yüksek</span><b>${fmt(best(g.id))}</b></div>
+          <div class="keys">${g.keys}</div>
+        </div>
+        <span class="coin">OYNA ▸</span>`;
+      b.addEventListener('click', () => open(g));
+      cabinets.append(b);
+    });
+  }
+
+  function open(g) {
+    current = { ...g, record: best(g.id) };
+    screen.style.setProperty('--c', g.color);
+    document.getElementById('screen-title').textContent = g.title;
+    document.getElementById('screen-best').textContent = `EN YÜKSEK ${fmt(best(g.id))}`;
+    frame.src = `games/${g.id}.html`;
+    screen.hidden = false;
+    document.body.style.overflow = 'hidden';
+    frame.addEventListener('load', () => frame.contentWindow && frame.focus(), { once: true });
+    try { history.replaceState(null, '', `#${g.id}`); } catch {}
+  }
+
+  function close() {
+    screen.hidden = true;
+    frame.src = 'about:blank';
+    document.body.style.overflow = '';
+    current = null;
+    try { history.replaceState(null, '', location.pathname); } catch {}
+    render();
+  }
+
+  let toastTimer;
+  function say(text) {
+    toast.textContent = text;
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast.hidden = true), 2400);
+  }
+
+  // The game may already have written the new best to storage before posting,
+  // so compare against the record held when the cabinet was opened.
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || d.type !== 'arcade-score' || !current || d.game !== current.id) return;
+    const score = Number(d.score) || 0;
+    const isRecord = score > current.record;
+    current.record = Math.max(current.record, score);
+    document.getElementById('screen-best').textContent = `EN YÜKSEK ${fmt(current.record)}`;
+    say(isRecord ? `YENİ REKOR · ${fmt(score)}` : `SKOR · ${fmt(score)}`);
+  });
+
+  document.getElementById('back').addEventListener('click', close);
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && current) close(); });
+
+  render();
+  const deep = GAMES.find((g) => `#${g.id}` === location.hash);
+  if (deep) open(deep);
+</script>
+<!-- body:end -->
+</body>
+</html>
